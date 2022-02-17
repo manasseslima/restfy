@@ -8,22 +8,36 @@ A small rest framework
 pip install restfy
 ```
 
-## Basic usage
+## Usage
+
+### Minimal usage
 
 ```python
-import asyncio
-from restfy import Application
+from restfy import Application, Server
 from restfy.http import Response, Request
 
 
-async def root(request: Request) -> Response:
+async def handler(request: Request) -> Response:
     data = 'restfy'
     return Response(data)
 
 
 app = Application()
-app.add_route('/', root, method='GET')
+app.add_route('/', handler, method='GET')
 
-asyncio.run(app.run())
+server = Server(app)
+server.run()
+
+```
+
+### Receiving Json data and args from request object
+
+```python
+...
+async def handler(request: Request) -> Response:
+    ...
+    args = request.args()  # A dict from querystring values.
+    data = request.dict()  # Try deserialise body in a dict.
+    ...
 
 ```

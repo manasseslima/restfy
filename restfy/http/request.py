@@ -5,10 +5,10 @@ class Request:
     def __init__(self, method, version):
         self.method = method
         self.url = ''
-        self.args = {}
         self.version = version
         self.body = None
         self.type = ''
+        self.query = ''
         self.length = 0
         self.headers = {}
         self.files = []
@@ -27,13 +27,18 @@ class Request:
             path = url
             query = ''
         self.url = path
-        if query:
-            pairs = query.split('&')
-            for pair in pairs:
-                (key, value) = pair.split('=')
-                self.args[key] = value
+        self.query = query
 
-    def json(self):
+    def dict(self):
         if self.body:
             return json.loads(self.body)
         return {}
+
+    def args(self):
+        args = {}
+        if self.query:
+            pairs = self.query.split('&')
+            for pair in pairs:
+                (key, value) = pair.split('=')
+                args[key] = value
+        return args
