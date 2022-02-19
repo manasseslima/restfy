@@ -1,15 +1,20 @@
 import asyncio
+import datetime
 from .http import Request, Response
 from .router import Router
 
 
 class Application:
-    def __init__(self):
-        self.router = Router()
+    def __init__(self, base_url=''):
+        self.router = Router(base_url=base_url)
+
+    def add_route(self, path, handle, method='GET'):
+        self.router.add_route(path, handle, method)
 
     async def handler(self, reader: asyncio.streams.StreamReader, writer: asyncio.streams.StreamWriter):
         data = await reader.readline()
         (method, url, version) = data.decode().replace('\n', '').split(' ')
+        print(f"[{datetime.datetime.now().isoformat()}] {method} {url}")
         request = Request(method=method, version=version)
         request.prepare_url(url)
         if route := self.router.match(request.url, method):
@@ -32,5 +37,4 @@ class Application:
         await writer.drain()
         writer.close()
 
-    def add_route(self, path, handle, method='GET'):
-        self.router.add_route(path, handle, method)
+
