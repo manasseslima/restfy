@@ -20,15 +20,6 @@ class Request:
         elif key == 'Content-Length':
             self.length = int(value)
 
-    def prepare_url(self, url):
-        if '?' in url:
-            (path, query) = url.split('?')
-        else:
-            path = url
-            query = ''
-        self.url = path
-        self.query = query
-
     def dict(self):
         if self.body:
             return json.loads(self.body)
