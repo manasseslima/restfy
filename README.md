@@ -64,7 +64,7 @@ app.add_route('/{pk}', handler, method='GET')
 ...
 ```
 
-### Returning a resonse with custom informations
+### Returning a response with custom informations
 
 ```python
 from restfy.http import Response, Request
