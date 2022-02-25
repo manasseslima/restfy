@@ -51,7 +51,7 @@ class Route:
         if path:
             route.add_node(path=path, handle=handle, method=method)
         else:
-            route.add_handler(handle, method)
+            route.add_handler(Handler(handle), method)
 
     def add_handler(self, handle, method):
         self.handlers[method] = handle
@@ -69,9 +69,28 @@ class Router(Route):
     def add_route(self, path, handle, method='GET'):
         path = path[1:].split('/')
         if len(path) == 1 and path[0] == '':
-            self.add_handler(handle, method)
+            self.add_handler(Handler(handle), method)
         else:
             self.add_node(path=path, handle=handle, method=method)
+
+    def register_router(self, path, router):
+        nodes = path[1:].split('/')
+        if len(nodes) == 1 and nodes[0] == '':
+            self.routes = router.routes
+            self.variable = router.variable
+            self.is_variable = router.is_variable
+        else:
+            routes = self.routes
+            while True:
+                node = nodes.pop(0)
+                if len(nodes) == 0:
+                    routes[node] = router
+                    break
+                else:
+                    if routes[node].routes:
+                        routes = routes[node].routes
+                    else:
+                        routes = routes[node].variable
 
     def match(self, url, method):
         nodes = url[1:].split('/')
