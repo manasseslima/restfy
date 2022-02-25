@@ -9,7 +9,10 @@ class Application:
         self.router = Router(base_url=base_url)
 
     def add_route(self, path, handle, method='GET'):
-        self.router.add_route(path, Handler(handle), method)
+        self.router.add_route(path, handle, method)
+
+    def register_router(self, path, router):
+        self.router.register_router(path, router)
 
     async def handler(self, reader: asyncio.streams.StreamReader, writer: asyncio.streams.StreamWriter):
         data = await reader.readline()

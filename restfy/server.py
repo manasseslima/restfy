@@ -8,7 +8,7 @@ class Server:
         self.port = port
 
     async def serve(self):
-        print(f'RESTFY RUNNING ON {self.port}')
+        print(f'RESTFY ON {self.port}')
         server = await asyncio.start_server(self.app.handler, self.host, self.port)
         async with server:
             await server.serve_forever()
