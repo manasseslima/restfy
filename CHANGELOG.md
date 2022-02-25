@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Path variables to routes using name into {}.
 - Request method .dict() to parser body to dict.
 - Request method .args() to parser querystring variables to dict.
+- Print requests info.
 
 ## [0.1.0] - 2017-02-16
 ### Added
@@ -21,7 +22,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Class Request to organize HTTP request elements.
 - Class Response to render an HTTP response format.
 - Created router handlers.
-
 
 
 
