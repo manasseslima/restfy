@@ -34,8 +34,11 @@ server.run()
 
 ```python
 ...
+
 from restfy.http import Response, Request
+
 ...
+
 async def handler(request: Request) -> Response:
     ...
     args = request.args()  # A dict with querystring values.
