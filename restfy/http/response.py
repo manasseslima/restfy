@@ -29,23 +29,20 @@ status_title = {
 
 
 class Response:
-    def __init__(self, data='', status=200, headers=None):
+    def __init__(
+            self,
+            data='',
+            *,
+            status: int = 200,
+            content_type: str = '',
+            headers: dict = None
+    ):
         self.version = 'HTTP/1.1'
         self.status = status
-        self.headers = {
-            'Content-Type': 'text/plain'
-        }
-        if headers:
-            self.headers.update(headers)
-        self.data = None
-        if isinstance(data, dict) or isinstance(data, list):
-            self.data = json.dumps(data)
-            self.headers['Content-Type'] = 'application/json'
-            self.headers['Content-length'] = len(self.data)
-        elif isinstance(data, bytes):
-            self.data = data
-        else:
-            self.data = data
+        self.data = data if status != 204 else None
+        self.headers = {}
+        self.content_type = content_type
+        self._prepare_headers(headers)
 
     def render(self):
         title = status_title.get(self.status, 'STATUS WITHOUT TITLE')
@@ -53,3 +50,17 @@ class Response:
         body = self.data
         content = f'{self.version} {self.status} {title}\r\n{headers}\r\n\r\n{body}'
         return content.encode()
+
+    def _prepare_headers(self, headers):
+        if not headers:
+            headers = {}
+        if isinstance(self.data, dict) or isinstance(self.data, list):
+            self.data = json.dumps(self.data)
+            self.headers['Content-Type'] = 'application/json'
+        elif isinstance(self.data, str):
+            self.headers['Content-Type'] = 'text/plain'
+        if self.data:
+            self.headers['Content-Length'] = len(self.data)
+        if self.content_type:
+            self.headers['Content-Type'] = self.content_type
+        self.headers.update(headers)
