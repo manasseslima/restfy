@@ -35,16 +35,23 @@ A route can be added by decorating handler function with .get, .post, .put, .del
 ```python
 from restfy import Application, Router, Request, Response
 
+# By using router object
 router = Router()
 
 @router.get('')
 async def handler(request: Request) -> Response:
     ret = {}
-    return Response({})
+    return Response(ret)
 
 
 app = Application()
 app.register_router('', router=router)
+
+# Or by app routers decorators
+@app.post('')
+async def other_handler(request: Request) -> Response:
+    ret = request.data
+    return Response(ret)
 
 ...
 
