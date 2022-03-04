@@ -84,3 +84,24 @@ class Application:
             self.middlewares[-1].next = instance
         self.middlewares.append(instance)
 
+    def get(self, path):
+        return self.router.get(path)
+
+    def post(self, path):
+        return self.router.post(path)
+
+    def put(self, path):
+        return self.router.put(path)
+
+    def delete(self, path):
+        return self.router.delete(path)
+
+    def patch(self, path):
+        return self.router.patch(path)
+
+    def options(self, path):
+        return self.router.options(path)
+
+    def head(self, path):
+        return self.router.head(path)
+
