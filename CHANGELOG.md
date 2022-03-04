@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 - Register subrouters with a base path node.
+- Application with CORS configuration.
+- Application instance in request instance.
+- Multipart Form data extract to data and files request attributes.
+- URL form encoded data.
+- Prepare request data before execute handler.
+- Application and Router with decorator route add.
 
 ## [0.2.0] - 2022-02-23
 ### Added

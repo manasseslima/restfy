@@ -1,4 +1,5 @@
 import inspect
+from restfy.http import Request
 
 
 class Handler:
@@ -25,7 +26,7 @@ class Handler:
 
 
 class Route:
-    def __init__(self, name='', node='', path=None, handle=None, method=''):
+    def __init__(self, name='', node='', path=None, handle=None, method='', prepare_data=True):
         self.properties = {}
         self.handlers = {}
         self.routes = {}
@@ -33,6 +34,7 @@ class Route:
         self.is_variable = False
         self.variable_type = str
         self.name = name
+        self.prepare_data: bool = prepare_data
 
     def add_node(self, path, handle, method='GET'):
         node = path.pop(0)
@@ -56,9 +58,12 @@ class Route:
     def add_handler(self, handle, method):
         self.handlers[method] = handle
 
-    async def exec(self, request):
+    async def exec(self, request: Request):
+        handler = self.handlers[request.method]
+        if self.prepare_data and request.app.prepare_request_data:
+            request.prepare_data()
         properties = {'request': request, **self.properties}
-        return await self.handlers[request.method].execute(properties)
+        return await handler.execute(properties)
 
 
 class Router(Route):
@@ -117,3 +122,32 @@ class Router(Route):
                 route = None
         return route
 
+    def get(self, path):
+        def wrapper(func):
+            self.add_route(path, handle=func)
+            return func
+        return wrapper
+
+    def post(self, path):
+        def wrapper(func):
+            self.add_route(path, handle=func, method='POST')
+            return func
+        return wrapper
+
+    def put(self, path):
+        def wrapper(func):
+            self.add_route(path, handle=func, method='PUT')
+            return func
+        return wrapper
+
+    def delete(self, path):
+        def wrapper(func):
+            self.add_route(path, handle=func, method='DELETE')
+            return func
+        return wrapper
+
+    def patch(self, path):
+        def wrapper(func):
+            self.add_route(path, handle=func, method='PATCH')
+            return func
+        return wrapper

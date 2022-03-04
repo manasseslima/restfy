@@ -1,12 +1,24 @@
 import asyncio
 import datetime
-from .http import Request, Response
-from .router import Router, Handler
+import time
+import inspect
+from typing import List
+
+from .http import Request, Response, AccessControl
+from .router import Router, Route
+from .middleware import Middleware
 
 
 class Application:
-    def __init__(self, base_url=''):
+    def __init__(
+            self,
+            base_url: str = '',
+            prepare_request_data: bool = True
+    ):
         self.router = Router(base_url=base_url)
+        self.cors = AccessControl()
+        self.middlewares: List[Middleware] = []
+        self.prepare_request_data = prepare_request_data
 
     def add_route(self, path, handle, method='GET'):
         self.router.add_route(path, handle, method)
@@ -15,41 +27,60 @@ class Application:
         self.router.register_router(path, router)
 
     async def handler(self, reader: asyncio.streams.StreamReader, writer: asyncio.streams.StreamWriter):
+        start = datetime.datetime.now()
+        ini = time.time()
         data = await reader.readline()
         (method, url, version) = data.decode().replace('\n', '').split(' ')
-        print(f"[{datetime.datetime.now().isoformat()}] {method} {url}")
         request = Request(method=method, version=version)
-        self.prepare_url(url, request)
+        request.prepare_url(url)
         try:
-            if route := self.router.match(request.url, method):
+            while True:
+                line = await reader.readline()
+                header = line.decode()
+                if header == '\r\n':
+                    break
+                header = header.replace('\r\n', '')
+                splt = header.split(':', maxsplit=1)
+                request.add_header(key=splt[0].strip(), value=splt[1].strip())
+            if request.length:
+                size = request.length
+                content = b''
                 while True:
-                    data = await reader.readline()
-                    header = data.decode()
-                    if header == '\r\n':
+                    content += await reader.read(size)
+                    size = request.length - len(content)
+                    if size == 0:
                         break
-                    header = header.replace('\r\n', '')
-                    splt = header.split(':', maxsplit=1)
-                    request.add_header(key=splt[0].strip(), value=splt[1].strip())
-                if request.length:
-                    size = request.length
-                    data = await reader.read(size)
-                    request.body = data
-                response = await route.exec(request)
+                request.body = content
+            if request.preflight:
+                response = Response(status=204)
+                response.headers.update(self.cors.get_response_headers())
             else:
-                response = Response(status=404)
+                if route := self.router.match(request.url, method):
+                    request.app = self
+                    response = await self.execute_middlewares(route, request)
+                    if request.origin:
+                        response.headers.update(self.cors.get_response_headers())
+                else:
+                    response = Response(status=404)
         except Exception as e:
             response = Response({'message': 'Internal server error', 'detail': str(e)}, status=500)
         writer.write(response.render())
         await writer.drain()
         writer.close()
+        diff = time.time() - ini
+        print(f'{[start.isoformat()]} {method} {url} --> {response.status}: {diff * 1000} ms')
 
-    def prepare_url(self, url, request):
-        if '?' in url:
-            (path, query) = url.split('?')
+    async def execute_middlewares(self, route: Route, request: Request) -> Response:
+        if self.middlewares:
+            self.middlewares[-1].next = route
+            response = await self.middlewares[0].exec(request)
         else:
-            path = url
-            query = ''
-        request.url = path
-        request.query = query
+            response = await route.exec(request)
+        return response
 
+    def register_middleware(self, middleware):
+        instance = middleware()
+        if self.middlewares:
+            self.middlewares[-1].next = instance
+        self.middlewares.append(instance)
 
