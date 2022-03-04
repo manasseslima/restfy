@@ -151,3 +151,15 @@ class Router(Route):
             self.add_route(path, handle=func, method='PATCH')
             return func
         return wrapper
+
+    def options(self, path):
+        def wrapper(func):
+            self.add_route(path, handle=func, method='OPTIONS')
+            return func
+        return wrapper
+
+    def head(self, path):
+        def wrapper(func):
+            self.add_route(path, handle=func, method='HEAD')
+            return func
+        return wrapper
