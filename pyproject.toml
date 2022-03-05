@@ -4,6 +4,8 @@ version = "0.3.0"
 description = "A small rest framework"
 authors = ["Manasses Lima <manasseslima@gmail.com>"]
 license = "MIT"
+readme = "README.md"
+repository = "https://github.com/manasseslima/restfy"
 
 [tool.poetry.dependencies]
 python = "^3.9"
