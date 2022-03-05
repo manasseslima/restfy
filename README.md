@@ -1,6 +1,8 @@
 # restfy
 A small rest framework.
 
+[![Stable Version](https://img.shields.io/pypi/v/restfy?label=pypi)](https://pypi.org/project/restfy/)
+
 
 ## Instalation
 
