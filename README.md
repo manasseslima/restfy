@@ -47,7 +47,7 @@ async def handler(request: Request) -> Response:
 app = Application()
 app.register_router('', router=router)
 
-# Or by app routers decorators
+# Or by app router decorator
 @app.post('')
 async def other_handler(request: Request) -> Response:
     ret = request.data
