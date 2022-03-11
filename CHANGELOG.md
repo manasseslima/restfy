@@ -4,7 +4,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
 ## [Unreleased]
+
+
+## [0.3.1]
+### Added
+- Response use specialized class to encoder json.
+
+### Fixed
+- Fixed error when create a handler without Request return type information.
+
+
+## [0.3.0] - 2022-03-03
 ### Added
 - Register subrouters with a base path node.
 - Application with CORS configuration.
@@ -21,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Request method .dict() to parser body to dict.
 - Request method .args() to parser querystring variables to dict.
 - Print requests info.
+
 
 ## [0.1.0] - 2017-02-16
 ### Added

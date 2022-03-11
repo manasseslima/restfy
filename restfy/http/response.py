@@ -1,4 +1,7 @@
 import json
+import datetime
+import decimal
+from typing import Any
 
 status_title = {
     200: 'OK',
@@ -28,6 +31,19 @@ status_title = {
 }
 
 
+class JSONEncoder(json.JSONEncoder):
+    def default(self, o: Any) -> Any:
+        if hasattr(o, "dict"):
+            return self.default(o.dict())
+        if isinstance(o, datetime.date):
+            return o.strftime('%Y-%m-%d')
+        if isinstance(o, datetime.datetime):
+            return o.isoformat()
+        if isinstance(o, decimal.Decimal):
+            return float(o)
+        return o
+
+
 class Response:
     def __init__(
             self,
@@ -55,7 +71,7 @@ class Response:
         if not headers:
             headers = {}
         if isinstance(self.data, dict) or isinstance(self.data, list):
-            self.data = json.dumps(self.data)
+            self.data = json.dumps(self.data, cls=JSONEncoder)
             self.headers['Content-Type'] = 'application/json'
         elif isinstance(self.data, str):
             self.headers['Content-Type'] = 'text/plain'
