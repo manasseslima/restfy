@@ -6,7 +6,8 @@ class Handler:
     def __init__(self, func):
         self.func = func
         args = inspect.getfullargspec(func).annotations
-        self.return_type = args.pop('return')
+        if 'return' in args:
+            self.return_type = args.pop('return')
         self.parameters = args
 
     async def execute(self, properties):
