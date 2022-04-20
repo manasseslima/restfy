@@ -12,9 +12,14 @@ from .middleware import Middleware
 class Application:
     def __init__(
             self,
+            title: str = 'Restfy',
+            description: str = '',
+            *,
             base_url: str = '',
             prepare_request_data: bool = True
     ):
+        self.title = title
+        self.description = description
         self.router = Router(base_url=base_url)
         self.cors = AccessControl()
         self.middlewares: List[Middleware] = []
