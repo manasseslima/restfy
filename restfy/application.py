@@ -73,7 +73,7 @@ class Application:
         await writer.drain()
         writer.close()
         diff = time.time() - ini
-        print(f'{[start.isoformat()]} {method} {url} --> {response.status}: {diff * 1000} ms')
+        self.print_request(start, method, url, response, diff)
 
     async def execute_middlewares(self, route: Route, request: Request) -> Response:
         if self.middlewares:
@@ -109,4 +109,30 @@ class Application:
 
     def head(self, path):
         return self.router.head(path)
+
+    def print_request(self, start, method, url, response, diff):
+        colors = {
+            'black': '\033[30m',
+            'red': '\033[31m',
+            'green': '\033[32m',
+            'orange': '\033[33m',
+            'blue': '\033[34m',
+            'pink': '\033[35m',
+            'cian': '\033[36m',
+            'gray': '\033[37m',
+            'white': '\033[38m',
+        }
+        if response.status >= 400:
+            color_response = 'red'
+        else:
+            color_response = 'blue'
+        methods_color = {
+            'GET': 'green',
+            'POST': 'blue',
+            'PUT': 'orange',
+            'DELETE': 'red',
+        }
+        method_color = methods_color.get(method, '')
+        print(f'[{start.isoformat()}] {colors.get(method_color, colors["gray"])} {method} {url} '
+              f'--> {colors.get(color_response, "")}{response.status}: {diff * 1000} ms\033[0m')
 
