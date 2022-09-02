@@ -1,7 +1,10 @@
 import asyncio
 import datetime
 import time
+import base64
+import hashlib
 import inspect
+import uuid
 from typing import List
 
 from .http import Request, Response, AccessControl
@@ -65,11 +68,28 @@ class Application:
                     response = await self.execute_middlewares(route, request)
                     if request.origin:
                         response.headers.update(self.cors.get_response_headers())
+                    if route.is_websocket:
+                        uid = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
+                        key = request.headers.get('Sec-WebSocket-Key')
+                        new_key = key + uid
+                        sha = hashlib.sha1(new_key.encode()).digest()
+                        accept = base64.b64encode(sha).decode()
+                        ws_header = {
+                            'Upgrade': request.headers.get('Upgrade'),
+                            'Connection': request.headers.get('Connection'),
+                            'Sec-WebSocket-Accept': accept,
+                        }
+                        if 'Sec-WebSocket-Protocol' in request.headers:
+                            ws_header['Sec-WebSocket-Protocol'] = request.headers['Sec-WebSocket-Protocol']
+                        response.status = 101
+                        del response.headers['Access-Control-Allow-Origin']
+                        response.headers.update(ws_header)
                 else:
                     response = Response(status=404)
         except Exception as e:
-            response = Response({'message': 'Internal server error', 'detail': str(e)}, status=500)
-        writer.write(response.render())
+            response = Response({'message': 'Internal Server Error', 'detail': str(e)}, status=500)
+        block = response.render()
+        writer.write(block)
         await writer.drain()
         writer.close()
         diff = time.time() - ini
@@ -109,6 +129,9 @@ class Application:
 
     def head(self, path):
         return self.router.head(path)
+
+    def websocket(self, path):
+        return self.router.websocket(path)
 
     def print_request(self, start, method, url, response, diff):
         colors = {
