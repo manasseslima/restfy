@@ -4,6 +4,7 @@ import decimal
 from typing import Any
 
 status_title = {
+    101: 'Switching Protocols',
     200: 'OK',
     201: 'CREATED',
     202: 'ACCEPTED',
@@ -70,13 +71,13 @@ class Response:
     def _prepare_headers(self, headers):
         if not headers:
             headers = {}
-        if isinstance(self.data, dict) or isinstance(self.data, list):
-            self.data = json.dumps(self.data, cls=JSONEncoder)
-            self.headers['Content-Type'] = 'application/json'
-        elif isinstance(self.data, str):
-            self.headers['Content-Type'] = 'text/plain'
         if self.data:
+            if self.content_type:
+                self.headers['Content-Type'] = self.content_type
+            if isinstance(self.data, dict) or isinstance(self.data, list):
+                self.data = json.dumps(self.data, cls=JSONEncoder)
+                self.headers['Content-Type'] = 'application/json'
+            elif isinstance(self.data, str):
+                self.headers['Content-Type'] = 'text/plain'
             self.headers['Content-Length'] = len(self.data)
-        if self.content_type:
-            self.headers['Content-Type'] = self.content_type
         self.headers.update(headers)

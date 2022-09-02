@@ -27,7 +27,7 @@ class Handler:
 
 
 class Route:
-    def __init__(self, name='', node='', path=None, handle=None, method='', prepare_data=True):
+    def __init__(self, name='', node='', path=None, handle=None, method='', prepare_data=True, websocket=False):
         self.properties = {}
         self.handlers = {}
         self.routes = {}
@@ -36,23 +36,26 @@ class Route:
         self.variable_type = str
         self.name = name
         self.prepare_data: bool = prepare_data
+        self.is_websocket = websocket
 
-    def add_node(self, path, handle, method='GET'):
+    def add_node(self, path, handle, method='GET', websocket=False):
         node = path.pop(0)
+        if websocket:
+            method = 'GET'
         if node.startswith('{'):
             if self.variable:
                 route = self.variable
             else:
-                route = Route()
+                route = Route(websocket=websocket)
                 route.is_variable = True
                 route.name = node[1:-1]
                 self.variable = route
         else:
-            route = self.routes.get(node, Route())
+            route = self.routes.get(node, Route(websocket=websocket))
             route.name = node
             self.routes[node] = route
         if path:
-            route.add_node(path=path, handle=handle, method=method)
+            route.add_node(path=path, handle=handle, method=method, websocket=websocket)
         else:
             route.add_handler(Handler(handle), method)
 
@@ -72,12 +75,12 @@ class Router(Route):
         super().__init__()
         self.base_url = base_url
 
-    def add_route(self, path, handle, method='GET'):
+    def add_route(self, path, handle, method='GET', websocket=False):
         path = path[1:].split('/')
         if len(path) == 1 and path[0] == '':
             self.add_handler(Handler(handle), method)
         else:
-            self.add_node(path=path, handle=handle, method=method)
+            self.add_node(path=path, handle=handle, method=method, websocket=websocket)
 
     def register_router(self, path, router):
         nodes = path[1:].split('/')
@@ -162,5 +165,11 @@ class Router(Route):
     def head(self, path):
         def wrapper(func):
             self.add_route(path, handle=func, method='HEAD')
+            return func
+        return wrapper
+
+    def websocket(self, path):
+        def wrapper(func):
+            self.add_route(path, handle=func, method='GET', websocket=True)
             return func
         return wrapper
