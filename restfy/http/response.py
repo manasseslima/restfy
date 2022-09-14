@@ -65,7 +65,9 @@ class Response:
         title = status_title.get(self.status, 'STATUS WITHOUT TITLE')
         headers = '\r\n'.join([f"{k}:{v}" for k, v in self.headers.items()])
         body = self.data
-        content = f'{self.version} {self.status} {title}\r\n{headers}\r\n\r\n{body}'
+        content = f'{self.version} {self.status} {title}\r\n{headers}\r\n\r\n'
+        if body:
+            content += f'{content}{body}'
         return content.encode()
 
     def _prepare_headers(self, headers):
