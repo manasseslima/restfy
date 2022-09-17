@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "restfy"
-version = "0.3.1"
+version = "0.3.2"
 description = "A small rest framework"
 authors = ["Manasses Lima <manasseslima@gmail.com>"]
 license = "MIT"
