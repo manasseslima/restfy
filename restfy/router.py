@@ -93,13 +93,14 @@ class Router(Route):
                     routes[node] = router
                     break
                 else:
-                    if node in routes[node].routes:
+                    if node in routes:
                         if routes[node].routes:
                             routes = routes[node].routes
                         else:
                             routes = routes[node].variable
                     else:
                         routes[node] = Router()
+                        routes = routes[node].routes
 
     def match(self, url, method):
         nodes = url[1:].split('/')
