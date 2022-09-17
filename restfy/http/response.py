@@ -48,7 +48,7 @@ class JSONEncoder(json.JSONEncoder):
 class Response:
     def __init__(
             self,
-            data='',
+            data: Any = None,
             *,
             status: int = 200,
             content_type: str = '',
@@ -67,19 +67,26 @@ class Response:
         body = self.data
         content = f'{self.version} {self.status} {title}\r\n{headers}\r\n\r\n'
         if body:
-            content += f'{content}{body}'
+            content = f'{content}{body}'
         return content.encode()
 
     def _prepare_headers(self, headers):
         if not headers:
             headers = {}
-        if self.data:
-            if self.content_type:
-                self.headers['Content-Type'] = self.content_type
-            if isinstance(self.data, dict) or isinstance(self.data, list):
-                self.data = json.dumps(self.data, cls=JSONEncoder)
-                self.headers['Content-Type'] = 'application/json'
-            elif isinstance(self.data, str):
-                self.headers['Content-Type'] = 'text/plain'
-            self.headers['Content-Length'] = len(self.data)
+        if self.data is None:
+            self.data = ''
+        if self.content_type:
+            self.headers['Content-Type'] = self.content_type
+        if isinstance(self.data, dict) or isinstance(self.data, list):
+            self.data = json.dumps(self.data, cls=JSONEncoder)
+            self.headers['Content-Type'] = 'application/json'
+        elif isinstance(self.data, bytes):
+            self._identify_binary_data()
+        elif isinstance(self.data, str):
+            self.headers['Content-Type'] = 'text/plain'
+        self.headers['Content-Length'] = len(self.data)
         self.headers.update(headers)
+
+    def _identify_binary_data(self):
+        if self.data[1:4] == 'PDF':
+            self.headers['Content-Type'] = 'application/pdf'

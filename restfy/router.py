@@ -38,6 +38,9 @@ class Route:
         self.prepare_data: bool = prepare_data
         self.is_websocket = websocket
 
+    def __repr__(self):
+        return f'{self.__class__}: {self.name}'
+
     def add_node(self, path, handle, method='GET', websocket=False):
         node = path.pop(0)
         if websocket:
@@ -96,10 +99,14 @@ class Router(Route):
                     routes[node] = router
                     break
                 else:
-                    if routes[node].routes:
-                        routes = routes[node].routes
+                    if node in routes:
+                        if routes[node].routes:
+                            routes = routes[node].routes
+                        else:
+                            routes = routes[node].variable
                     else:
-                        routes = routes[node].variable
+                        routes[node] = Router()
+                        routes = routes[node].routes
 
     def match(self, url, method):
         nodes = url[1:].split('/')
