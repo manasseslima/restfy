@@ -36,7 +36,7 @@ class Application:
         data = await reader.readline()
         (method, url, version) = data.decode().replace('\n', '').split(' ')
         request = Request(method=method, version=version)
-        request.prepare_url(url)
+        self.prepare_url(url, request)
         try:
             while True:
                 line = await reader.readline()
@@ -76,6 +76,30 @@ class Application:
         writer.close()
         diff = time.time() - ini
         self.print_request(start, method, url, response, diff)
+
+    def prepare_url(self, url, request):
+        if '?' in url:
+            (path, query) = url.split('?')
+        else:
+            path = url
+            query = ''
+        args = self.extract_arguments(query=query)
+        request.url = path
+        request.query = query
+        request.args = args
+        request.query_args = args
+
+    def extract_arguments(self, query):
+        ret = {}
+        if query:
+            pairs = query.split('&')
+            for pair in pairs:
+                (key, value) = tuple(pair.split('='))
+                ret[key] = self.argument_dedode(value)
+        return ret
+
+    def argument_dedode(self, value):
+        return value
 
     async def execute_middlewares(self, route: Route, request: Request) -> Response:
         if self.middlewares:
