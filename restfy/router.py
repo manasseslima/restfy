@@ -1,5 +1,5 @@
 import inspect
-from restfy.http import Request
+from restfy.http import Request, Response
 
 
 class Handler:
@@ -10,19 +10,32 @@ class Handler:
             self.return_type = args.pop('return')
         self.parameters = args
 
-    async def execute(self, properties):
+    async def execute(self, properties, request):
         args = {}
         for key, kind in self.parameters.items():
             value = properties.get(key)
             if not value:
-                raise Exception(f'Parameter {key}')
+                value = request.args.pop(key, '')
+            if not value:
+                continue
             if kind in [int, float, bool]:
                 try:
                     value = kind(value)
                 except Exception as e:
                     raise Exception(f'Error try cast value "{value}" {key} {kind}: {e}')
             args[key] = value
-        ret = await self.func(**args)
+        try:
+            ret = await self.func(**args)
+            if isinstance(ret, tuple):
+                ret = Response(ret[0], ret[1])
+            elif isinstance(ret, (dict, list, str, int, float, bool)):
+                ret = Response(ret)
+        except Exception as e:
+            data = {
+                'message': 'Error on executing request',
+                'detail': str(e)
+            }
+            ret = Response(data, status=400)
         return ret
 
 
@@ -70,7 +83,7 @@ class Route:
         if self.prepare_data and request.app.prepare_request_data:
             request.prepare_data()
         properties = {'request': request, **self.properties}
-        return await handler.execute(properties)
+        return await handler.execute(properties, request)
 
 
 class Router(Route):

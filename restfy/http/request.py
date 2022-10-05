@@ -61,15 +61,6 @@ class Request:
                 args[key] = value
         return args
 
-    def prepare_url(self, url):
-        if '?' in url:
-            (path, query) = url.split('?')
-        else:
-            path = url
-            query = ''
-        self.url = path
-        self.query = query
-
     def prepare_data(self):
         self.data = self.dict()
 
