@@ -3,7 +3,7 @@ from restfy.file import File
 
 
 class Request:
-    def __init__(self, method, version):
+    def __init__(self, method: str = 'GET', version: str = '1.1'):
         self.app = None
         self.method = method
         self.url = ''
