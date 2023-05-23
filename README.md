@@ -156,5 +156,3 @@ app = Application()
 app.register_middleware(DefaultMiddleware)
 
 ```
-
-
