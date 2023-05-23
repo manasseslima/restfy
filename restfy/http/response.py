@@ -60,6 +60,8 @@ class Response:
         self.headers = {}
         self.content_type = content_type
         self._prepare_headers(headers)
+        self.content = b''
+        self.text = ''
 
     def render(self):
         title = status_title.get(self.status, 'STATUS WITHOUT TITLE')
@@ -68,7 +70,14 @@ class Response:
         content = f'{self.version} {self.status} {title}\r\n{headers}\r\n\r\n'
         if body:
             content = f'{content}{body}'
-        return content.encode()
+            self.content = body.encode()
+        return content
+
+    def parser(self, model: Any = None):
+        res = json.loads(self.data)
+        if model:
+            res = model(**res)
+        return res
 
     def _prepare_headers(self, headers):
         if not headers:

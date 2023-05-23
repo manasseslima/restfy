@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Add
 - Application has a title and description attribute.
+- New method .parser() in Response class to get dict, list or a model instance.
+- New module testing with Client class to provide tests.
 ### Fixed
 
 
