@@ -95,10 +95,10 @@ class Application:
             pairs = query.split('&')
             for pair in pairs:
                 (key, value) = tuple(pair.split('='))
-                ret[key] = self.argument_dedode(value)
+                ret[key] = self.argument_decode(value)
         return ret
 
-    def argument_dedode(self, value):
+    def argument_decode(self, value):
         return value
 
     async def execute_middlewares(self, route: Route, request: Request) -> Response:
@@ -164,4 +164,3 @@ class Application:
         method_color = methods_color.get(method, '')
         print(f'[{start.isoformat()}] {colors.get(method_color, colors["gray"])} {method} {url} '
               f'--> {colors.get(color_response, "")}{response.status}: {diff * 1000} ms\033[0m')
-
