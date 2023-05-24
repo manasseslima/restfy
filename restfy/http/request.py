@@ -21,6 +21,7 @@ class Request:
         self.multipart = False
         self.boundary = ''
         self.data = {}
+        self.query_args = None
 
     def add_header(self, key, value):
         self.headers[key] = value

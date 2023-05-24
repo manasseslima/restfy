@@ -35,8 +35,7 @@ class Application:
         ini = time.time()
         data = await reader.readline()
         (method, url, version) = data.decode().replace('\n', '').split(' ')
-        request = Request(method=method, version=version)
-        self.prepare_url(url, request)
+        request = self.generate_request(url=url, method=method, version=version)
         try:
             while True:
                 line = await reader.readline()
@@ -59,15 +58,7 @@ class Application:
                 response = Response(status=204)
                 response.headers.update(self.cors.get_response_headers())
             else:
-                if route := self.router.match(request.url, method):
-                    request.app = self
-                    response = await self.execute_middlewares(route, request)
-                    if request.origin:
-                        response.headers.update(self.cors.get_response_headers())
-                    if route.is_websocket:
-                        prepare_websocket(request=request, response=response)
-                else:
-                    response = Response(status=404)
+                response = await self.execute_handler(request=request)
         except Exception as e:
             response = Response({'message': 'Internal Server Error', 'detail': str(e)}, status=500)
         block = response.render()
@@ -77,7 +68,20 @@ class Application:
         diff = time.time() - ini
         self.print_request(start, method, url, response, diff)
 
-    def prepare_url(self, url, request):
+    async def execute_handler(self, request):
+        if route := self.router.match(request.url, request.method):
+            response = await self.execute_middlewares(route, request)
+            if request.origin:
+                response.headers.update(self.cors.get_response_headers())
+            if route.is_websocket:
+                prepare_websocket(request=request, response=response)
+        else:
+            response = Response(status=404)
+        return response
+
+    def generate_request(self, url: str, method: str, version: str):
+        request = Request(method=method, version=version)
+        request.app = self
         if '?' in url:
             (path, query) = url.split('?')
         else:
@@ -88,6 +92,7 @@ class Application:
         request.query = query
         request.args = args
         request.query_args = args
+        return request
 
     def extract_arguments(self, query):
         ret = {}
@@ -98,7 +103,8 @@ class Application:
                 ret[key] = self.argument_decode(value)
         return ret
 
-    def argument_decode(self, value):
+    @staticmethod
+    def argument_decode(value):
         return value
 
     async def execute_middlewares(self, route: Route, request: Request) -> Response:
@@ -139,7 +145,8 @@ class Application:
     def websocket(self, path):
         return self.router.websocket(path)
 
-    def print_request(self, start, method, url, response, diff):
+    @staticmethod
+    def print_request(start, method, url, response, diff):
         colors = {
             'black': '\033[30m',
             'red': '\033[31m',
