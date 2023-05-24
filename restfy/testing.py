@@ -5,16 +5,6 @@ class Client:
     def __init__(self, app: Application):
         self.app = app
 
-    async def execute_handler(self, request: Request):
-        if route := self.app.router.match(request.url, request.method):
-            response = await self.app.execute_middlewares(route, request)
-            if request.origin:
-                response.headers.update(self.app.cors.get_response_headers())
-        else:
-            response = Response(status=404)
-        response.render()
-        return response
-
     async def request(
             self,
             method: str,
@@ -27,7 +17,8 @@ class Client:
         req.app = self.app
         req.headers = headers or {}
         req.body = data or b''
-        res = await self.execute_handler(req)
+        res = await self.app.execute_handler(req)
+        res.render()
         return res
 
     async def get(
