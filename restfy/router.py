@@ -1,42 +1,5 @@
-import inspect
-from restfy.http import Request, Response
-
-
-class Handler:
-    def __init__(self, func):
-        self.func = func
-        args = inspect.getfullargspec(func).annotations
-        if 'return' in args:
-            self.return_type = args.pop('return')
-        self.parameters = args
-
-    async def execute(self, properties, request):
-        args = {}
-        for key, kind in self.parameters.items():
-            value = properties.get(key)
-            if not value:
-                value = request.args.pop(key, '')
-            if not value:
-                continue
-            if kind in [int, float, bool]:
-                try:
-                    value = kind(value)
-                except Exception as e:
-                    raise Exception(f'Error try cast value "{value}" {key} {kind}: {e}')
-            args[key] = value
-        try:
-            ret = await self.func(**args)
-            if isinstance(ret, tuple):
-                ret = Response(ret[0], ret[1])
-            elif isinstance(ret, (dict, list, str, int, float, bool)):
-                ret = Response(ret)
-        except Exception as e:
-            data = {
-                'message': 'Error on executing request',
-                'detail': str(e)
-            }
-            ret = Response(data, status=400)
-        return ret
+from restfy.request import Request
+from restfy.handler import Handler
 
 
 class Route:
@@ -73,17 +36,19 @@ class Route:
         if path:
             route.add_node(path=path, handle=handle, method=method, websocket=websocket)
         else:
-            route.add_handler(Handler(handle), method)
+            route.add_handler(handle, method)
 
-    def add_handler(self, handle, method):
-        self.handlers[method] = handle
+    def add_handler(self, func, method: str):
+        handler = Handler(func)
+        self.handlers[method] = handler
 
     async def exec(self, request: Request):
         handler = self.handlers[request.method]
         if self.prepare_data and request.app.prepare_request_data:
             request.prepare_data()
-        properties = {'request': request, **self.properties}
-        return await handler.execute(properties, request)
+        for key, value in self.properties.items():
+            request.path_args[key] = value
+        return await handler.execute(self.properties, request)
 
 
 class Router(Route):
@@ -91,16 +56,24 @@ class Router(Route):
         super().__init__()
         self.base_url = base_url
 
-    def add_route(self, path, handle, method='GET', websocket=False):
+    def add_route(
+            self,
+            path: str,
+            handle: callable,
+            *,
+            method: str = 'GET',
+            websocket: bool = False
+    ):
         path = path[1:].split('/')
         if len(path) == 1 and path[0] == '':
-            self.add_handler(Handler(handle), method)
+            self.add_handler(handle, method)
         else:
             self.add_node(path=path, handle=handle, method=method, websocket=websocket)
 
     def register_router(self, path, router):
         nodes = path[1:].split('/')
         if len(nodes) == 1 and nodes[0] == '':
+            self.handlers = router.handlers
             self.routes = router.routes
             self.variable = router.variable
             self.is_variable = router.is_variable
@@ -127,21 +100,23 @@ class Router(Route):
             return self
         routes = self.routes
         variable = self.variable
-        properties = {}
+        args = {}
+        route = None
         while len(nodes) > 0:
             node = nodes.pop(0)
             route = routes.get(node, None)
             if not route:
                 if variable:
                     route = variable
-                    properties[route.name] = node
+                    args[route.name] = node
                 else:
                     break
-            routes = route.routes
-            variable = route.variable
+            else:
+                routes = route.routes
+                variable = route.variable
         if route:
             if method in route.handlers:
-                route.properties = properties
+                route.properties = args
             else:
                 route = None
         return route

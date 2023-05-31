@@ -26,8 +26,19 @@ async def teste_json_response():
 
 
 @pytest.mark.asyncio
-async def teste_request_query_args():
+async def teste_request_path_args():
     res = await client.get('/servers/1')
     assert res.status == 200
     data = res.parser()
     assert data['name'] == 'Hotbike'
+
+
+@pytest.mark.asyncio
+async def test_post_payload():
+    data = {
+        'id': 3,
+        'name': 'brainstorm'
+    }
+    res = await client.post('/servers', data=data)
+    assert res.status == 200
+

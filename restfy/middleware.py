@@ -1,4 +1,4 @@
-from .http import Request, Response
+from .response import Response
 
 
 class Middleware:
