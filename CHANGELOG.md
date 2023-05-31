@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ## [Unreleased]
+
+
+## [0.4.0] - 2023-05-31
 ### Add
 - Application has a title and description attribute.
 - New method .parser() in Response class to get dict, list or a model instance.
@@ -15,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - HTTP request client to requests.
 
 ### Fixed
-- Registring handler not mapping root paths.
+- Registering handler not mapping root paths.
 
 
 ## [0.3.1] - 2022-03-11
