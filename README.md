@@ -156,3 +156,35 @@ app = Application()
 app.register_middleware(DefaultMiddleware)
 
 ```
+
+### HTTP client requests
+With http module, you can realize asynchronous requests to other services.
+The most simple request can be seen below.
+```python
+from restfy import http
+...
+res = await http.get('https://someserver.api/endpoint')
+print(res.status)
+# 200
+```
+In addition to the get function, others functions are available like 
+post(), put(), delete() and patch(). 
+If other request method are necessary, we can use request() function passing method param.
+The next example shows a more complex example.
+```python
+from restfy import http
+
+...
+url = 'https://someserver.api/endpoint'
+data = {
+    'name': 'Nick',
+    'surname': 'Lauda'
+}
+headers = {
+    'Content-Type': 'application/json'
+}
+...
+res = await http.post(url=url, data=data, headers=headers)
+print(res.status)
+# 200
+```
