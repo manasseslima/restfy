@@ -10,7 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Application has a title and description attribute.
 - New method .parser() in Response class to get dict, list or a model instance.
 - New module testing with Client class to provide tests.
+- Using bike like model processor.
+- HTTPS support.
+- HTTP request client to requests.
+
 ### Fixed
+- Registring handler not mapping root paths.
 
 
 ## [0.3.1] - 2022-03-11

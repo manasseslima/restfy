@@ -1,10 +1,10 @@
 database = {
     'server': {
-        '1': {
+        1: {
             'id': 1,
             'name': 'Hotbike'
         },
-        '2': {
+        2: {
             'id': 2,
             'name': 'SimpleSky'
         }

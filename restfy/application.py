@@ -3,7 +3,8 @@ import datetime
 import time
 from typing import List
 from .websocket import prepare_websocket
-from .http import Request, Response, AccessControl
+from .request import Request, AccessControl
+from .response import Response
 from .router import Router, Route
 from .middleware import Middleware
 
