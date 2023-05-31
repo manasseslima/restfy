@@ -30,7 +30,7 @@ async def post(
         url: str,
         data: ...,
         *,
-        headers: str = None
+        headers: dict = None
 ):
     res = await request(method='POST', url=url, data=data, headers=headers)
     return res
@@ -40,7 +40,7 @@ async def put(
         url: str,
         data: ...,
         *,
-        headers: str = None
+        headers: dict = None
 ):
     res = await request(method='PUT', url=url, data=data, headers=headers)
     return res
@@ -49,7 +49,7 @@ async def put(
 async def delete(
         url: str,
         *,
-        headers: str = None
+        headers: dict = None
 ):
     res = await request(method='DELETE', url=url, headers=headers)
     return res
@@ -59,7 +59,7 @@ async def patch(
         url: str,
         data: ...,
         *,
-        headers: str = None
+        headers: dict = None
 ):
     res = await request(method='PATCH', url=url, data=data, headers=headers)
     return res
