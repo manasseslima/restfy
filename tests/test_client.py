@@ -34,7 +34,7 @@ async def teste_request_path_args():
 
 
 @pytest.mark.asyncio
-async def test_post_payload():
+async def test_post_payload_model():
     data = {
         'id': 3,
         'name': 'brainstorm'
@@ -42,3 +42,12 @@ async def test_post_payload():
     res = await client.post('/servers', data=data)
     assert res.status == 200
 
+
+@pytest.mark.asyncio
+async def test_put_payload_model():
+    data = {
+        'id': 1,
+        'name': 'mixin'
+    }
+    res = await client.put('/servers/1', data=data)
+    assert res.status == 200

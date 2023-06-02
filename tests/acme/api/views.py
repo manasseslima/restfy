@@ -34,3 +34,14 @@ async def insert_new_server(
     key = payload.id
     database['server'][key] = payload.dict()
     return {}
+
+
+@router.put('/servers/{key}')
+async def update_server_item(
+        request: Request,
+        payload: ServerModel,
+        key: int
+):
+    data = database['server'][key]
+    res = data.update(**payload.dict())
+    return res
