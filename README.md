@@ -33,6 +33,7 @@ server.run()
 ```
 
 ### Adding route by router decorator
+
 A route can be added by decorating handler function with .get, .post, .put, .delete or .path methods.
 ```python
 from restfy import Application, Router, Request, Response
@@ -61,6 +62,7 @@ async def other_handler(request: Request) -> Response:
 ```
 
 ### Receiving JSON data and args from request object
+
 By default, Restfy will try to deserialize body data into request object data property by content type header information.
 You can prefer deserialize body value manually or using dict request method. 
 For this case, it's recommended to disable the process of deserialize by parsing False to prepare_request_data in Application.
@@ -104,6 +106,7 @@ app.add_route('/{pk}', handler, method='GET')
 ```
 
 ### Returning a response with custom 
+
 By default, the Response class set 200 as status code. 
 The content type is identified dynamically by data type. 
 These parameters may be changed instancing the response passing status, headers and content_type parameters.
@@ -132,6 +135,7 @@ async def handler_other(request: Request, pk: int) -> Response:
 
 
 ### Middlewares
+
 Restfy uses middleware creating a class with .exec() method. 
 The parameter request must be passed into exec method.
 
@@ -158,6 +162,7 @@ app.register_middleware(DefaultMiddleware)
 ```
 
 ### HTTP client requests
+
 With http module, you can realize asynchronous requests to other services.
 The most simple request can be seen below.
 ```python
@@ -175,6 +180,7 @@ The next example shows a more complex example.
 from restfy import http
 
 ...
+
 url = 'https://someserver.api/endpoint'
 data = {
     'name': 'Nick',
@@ -183,7 +189,9 @@ data = {
 headers = {
     'Content-Type': 'application/json'
 }
+
 ...
+
 res = await http.post(url=url, data=data, headers=headers)
 print(res.status)
 # 200
