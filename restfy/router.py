@@ -48,7 +48,8 @@ class Route:
             request.prepare_data()
         for key, value in self.properties.items():
             request.path_args[key] = value
-        return await handler.execute(self.properties, request)
+            request.vars[key] = value
+        return await handler.execute(request)
 
 
 class Router(Route):

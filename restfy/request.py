@@ -1,5 +1,13 @@
 import json
+import mimetypes
 from restfy.file import File
+
+
+mime_types = {
+    'multipart/form-data': 'form-data',
+    'application/x-www-form-urlencoded': 'x-www-form-urlencoded',
+    **{v: k[1:] for k, v in mimetypes.types_map.items()},
+}
 
 
 class AccessControl:
@@ -48,7 +56,9 @@ class Request:
         self.boundary = ''
         self.data = {}
         self.query_args: dict = {}
+        self.params: dict = {}
         self.path_args: dict = {}
+        self.vars: dict = {}
 
     def add_header(self, key, value):
         self.headers[key] = value
@@ -59,7 +69,7 @@ class Request:
                 self.type = content.strip()
                 self.boundary = boundary.replace('boundary=', '').strip()
             else:
-                self.type = value
+                self.type = mime_types.get(value, 'plain')
         elif key == 'Content-Length':
             self.length = int(value)
         elif key == 'Origin':
@@ -71,12 +81,15 @@ class Request:
             self.request_headers = value
 
     def dict(self):
+        return self.decode_data()
+
+    def decode_data(self):
         if self.body:
-            if self.type == 'application/json':
+            if self.type == 'json':
                 return json.loads(self.body)
-            elif self.type == 'multipart/form-data':
+            elif self.type == 'form-data':
                 return self._process_form_data()
-            elif self.type == 'application/x-www-form-urlencoded':
+            elif self.type == 'x-www-form-urlencoded':
                 return self._url_decoded_data()
         return {}
 
@@ -90,7 +103,7 @@ class Request:
         return args
 
     def prepare_data(self):
-        self.data = self.dict()
+        self.data = self.decode_data()
 
     def _process_form_data(self):
         data = {}

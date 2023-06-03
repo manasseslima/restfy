@@ -179,9 +179,7 @@ The next example shows a more complex example.
 ```python
 from restfy import http
 
-...
 
-url = 'https://someserver.api/endpoint'
 data = {
     'name': 'Nick',
     'surname': 'Lauda'
@@ -189,9 +187,7 @@ data = {
 headers = {
     'Content-Type': 'application/json'
 }
-
-...
-
+url = 'https://someserver.api/endpoint'
 res = await http.post(url=url, data=data, headers=headers)
 print(res.status)
 # 200

@@ -40,8 +40,10 @@ async def insert_new_server(
 async def update_server_item(
         request: Request,
         payload: ServerModel,
-        key: int
+        mode: str,
 ):
+    key = int(request.vars['key'])
     data = database['server'][key]
-    res = data.update(**payload.dict())
-    return res
+    data.update(payload.dict())
+    return data
+

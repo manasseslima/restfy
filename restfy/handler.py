@@ -24,12 +24,10 @@ class Handler:
             else:
                 self.parameters[name] = param
 
-    async def execute(self, properties, request):
+    async def execute(self, request: Request):
         args = {}
         for key, kind in self.parameters.items():
-            value = properties.get(key)
-            if not value:
-                value = request.args.pop(key, '')
+            value = request.vars.pop(key, None) or request.params.pop(key, None)
             if not value:
                 continue
             if kind in [int, float, bool]:
@@ -41,7 +39,7 @@ class Handler:
         if self.request_parameter:
             args[self.request_parameter] = request
         if self.payload_parameter:
-            instance = self.payload_model(**request.body)
+            instance = self.payload_model(**request.data)
             args[self.payload_parameter] = instance
         try:
             ret = await self.func(**args)

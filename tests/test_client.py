@@ -49,5 +49,6 @@ async def test_put_payload_model():
         'id': 1,
         'name': 'mixin'
     }
-    res = await client.put('/servers/1', data=data)
+    url = '/servers/1?offset=3&size=20&mode=influx'
+    res = await client.put(url, data=data)
     assert res.status == 200
