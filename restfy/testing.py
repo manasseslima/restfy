@@ -1,4 +1,5 @@
-from .application import Application, Response, Request
+import json
+from .application import Application, Response
 
 
 class Client:
@@ -12,11 +13,21 @@ class Client:
             data: ... = None,
             headers: dict = None
     ) -> Response:
-        req = Request(method=method)
-        req.url = url
-        req.app = self.app
-        req.headers = headers or {}
-        req.body = data or b''
+        headers = headers or {}
+        req = self.app.generate_request(url=url, method=method, version='http/1.1')
+        for k, v in headers.items():
+            req.add_header(k, v)
+        content_type = req.headers.get('Content-Type', '')
+        if not content_type:
+            if isinstance(data, bytes):
+                raise Exception(f'A content type need to be set on headers')
+            req.body = json.dumps(data).encode()
+            req.add_header('Content-Type', 'application/json')
+            req.add_header('Content-Length', len(req.body))
+        else:
+            if content_type == 'application/json' and not isinstance(data, bytes):
+                req.body = json.dumps(data).encode()
+                req.add_header('Content-Length', len(req.body))
         res = await self.app.execute_handler(req)
         res.render()
         return res

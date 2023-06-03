@@ -31,7 +31,11 @@ class Application:
     def register_router(self, path, router):
         self.router.register_router(path, router)
 
-    async def handler(self, reader: asyncio.streams.StreamReader, writer: asyncio.streams.StreamWriter):
+    async def handler(
+            self,
+            reader: asyncio.streams.StreamReader,
+            writer: asyncio.streams.StreamWriter
+    ):
         start = datetime.datetime.now()
         ini = time.time()
         data = await reader.readline()
@@ -47,13 +51,15 @@ class Application:
                 splt = header.split(':', maxsplit=1)
                 request.add_header(key=splt[0].strip(), value=splt[1].strip())
             if request.length:
-                size = request.length
+                length = request.length
+                size = length if length <= 1000 else 1000
                 content = b''
                 while True:
                     content += await reader.read(size)
-                    size = request.length - len(content)
-                    if size == 0:
+                    length -= size
+                    if length == 0:
                         break
+                    size = length if length <= 1000 else 1000
                 request.body = content
             if request.preflight:
                 response = Response(status=204)
@@ -66,10 +72,11 @@ class Application:
         writer.write(block)
         await writer.drain()
         writer.close()
+        await writer.wait_closed()
         diff = time.time() - ini
         self.print_request(start, method, url, response, diff)
 
-    async def execute_handler(self, request):
+    async def execute_handler(self, request: Request):
         if route := self.router.match(request.url, request.method):
             response = await self.execute_middlewares(route, request)
             if request.origin:
@@ -80,19 +87,21 @@ class Application:
             response = Response(status=404)
         return response
 
-    def generate_request(self, url: str, method: str, version: str):
+    def generate_request(
+            self,
+            url: str,
+            method: str,
+            version: str
+    ) -> Request:
         request = Request(method=method, version=version)
         request.app = self
-        if '?' in url:
-            (path, query) = url.split('?')
-        else:
-            path = url
-            query = ''
-        args = self.extract_arguments(query=query)
+        splt = url.split('?')
+        path, query = splt[0], splt[1] if len(splt) > 1 else ''
         request.url = path
         request.query = query
-        request.args = args
+        args = self.extract_arguments(query=query)
         request.query_args = args
+        request.params = {**args}
         return request
 
     def extract_arguments(self, query):

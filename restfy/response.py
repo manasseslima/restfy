@@ -49,8 +49,8 @@ class Response:
     def __init__(
             self,
             data: Any = None,
-            *,
             status: int = 200,
+            *,
             content_type: str = '',
             headers: dict = None
     ):
@@ -63,7 +63,7 @@ class Response:
         self.content = b''
         self.text = ''
 
-    def render(self):
+    def render(self) -> bytes:
         title = status_title.get(self.status, 'STATUS WITHOUT TITLE')
         headers = '\r\n'.join([f"{k}:{v}" for k, v in self.headers.items()])
         body = self.data
@@ -71,7 +71,7 @@ class Response:
         if body:
             content = f'{content}{body}'
             self.content = body.encode()
-        return content
+        return content.encode()
 
     def parser(self, model: Any = None):
         res = json.loads(self.data)
