@@ -13,103 +13,150 @@ pip install restfy
 ## Usage
 
 ### Minimal usage
+A basic Restfy application is showed below.
 
 ```python
-from restfy import Application, Server
-from restfy.http import Response, Request
+from restfy import Application, Server, Request, Response
+
+app = Application()
+
+
+@app.post('/')
+async def handler(request: Request) -> Response:
+    ret = request.data
+    return Response(ret)
+
+
+server = Server(app)
+server.run()
+```
+This code fragment sets up a basic web application using your asynchronous web application framework. 
+It defines a route for a POST request at the root URL and returns a response with the request data. 
+The server is then started to handle incoming requests.
+
+In this code, the **restfy** module is imported, and the necessary classes **Application**, **Server**, **Request**, and **Response** are imported from it.
+
+An instance of the Application class is created and assigned to the variable app. This class represents the restfy application framework itself.
+
+The `@app.post('/')` decorator is used to define a route for the HTTP POST method at the root URL ("/") of the application. When a POST request is made to this URL, the handler function will be called.
+
+The handler function is an asynchronous function that takes a request parameter of type Request. It creates a Response object with a data and returns it.
+
+An instance of the Server class is created, passing the app object as a parameter to associate the server with the application.
+
+Finally, the run() method is called on the server object, which starts the server and makes it listen for incoming requests.
+
+The routes also can be added by using `.add_route(path, handler, method)` application method.
+
+```python
+from restfy import Application, Server, Response, Request
 
 
 async def handler(request: Request) -> Response:
-    data = 'restfy'
+    data = f'{request.method}: {request.url}'
     return Response(data)
 
 
 app = Application()
 app.add_route('/', handler, method='GET')
-
-server = Server(app)
-server.run()
-
+...
 ```
 
 ### Adding route by router decorator
 
-A route can be added by decorating handler function with .get, .post, .put, .delete or .path methods.
-```python
-from restfy import Application, Router, Request, Response
+For applications with a great number of routes is necessary a better modules organization.
+To help in this process, Restfy has a class to manager the routes, **Router** class.
 
-# By using router object
+The Router class is similar to Application class to register routes.
+Then, a cluster of routes can be created as necessary.
+```python
+# servers.py
+from restfy import Router
+
 router = Router()
 
+
 @router.get('')
-async def handler(request: Request) -> Response:
-    ret = {}
-    return Response(ret)
+async def get_servers_list():
+    ret = []
+    return ret
 
 
-app = Application()
-app.register_router('', router=router)
-
-# Or by app router decorator
-@app.post('')
-async def other_handler(request: Request) -> Response:
-    ret = request.data
-    return Response(ret)
-
-...
-
-
-```
-
-### Receiving JSON data and args from request object
-
-By default, Restfy will try to deserialize body data into request object data property by content type header information.
-You can prefer deserialize body value manually or using dict request method. 
-For this case, it's recommended to disable the process of deserialize by parsing False to prepare_request_data in Application.
-
-The querystring values are deserialized using args() request method. The raw querystring is on query request attribute.
-
-```python
-...
-
-from restfy.http import Response, Request
-
-...
-
-async def handler(request: Request) -> Response:
-    data = request.data  # pre-deserialized body data before execute handler.
-    args = request.args()  # A dict with querystring values.
-    data = request.dict()  # Try deserialize body data in a dictionary. Recommended to use request.data instead.
-    query = request.query
+@router.post('')
+async def create_new_server():
     ...
+    return {}
 
-```
+...
 
-### Parsing value in url path.
-
-If a path item is inside {}, its a variable. The handler function should have a parameter with the same name.
-
-```python
-from restfy import Application, Server
-from restfy.http import Response, Request
-
-
-async def handler(request: Request, pk: int) -> Response:
-    data = f'restfy: pk {pk}'
-    return Response(data)
+# application.py
+from restfy import Application
+from .servers import router as servers
 
 
 app = Application()
-app.add_route('/{pk}', handler, method='GET')
-
+app.register_router('/servers', servers)
 ...
 ```
+As we can see, the routes are defined on other file by a **Route** instance.
+The app object registry this through `.register_router(path, router)`.
 
-### Returning a response with custom 
+With this approach, several routes can be registered with different routes.
 
-By default, the Response class set 200 as status code. 
-The content type is identified dynamically by data type. 
-These parameters may be changed instancing the response passing status, headers and content_type parameters.
+
+## Receiving data and args from request object
+
+The information can be passed by path variables, query_string parameters, request body and request headers.
+
+Below, is showed a condensed example how to that information are distributed inside **Request** object.
+
+```python
+...
+@router.put('/servers/{key}')
+async def handler(
+        request: Request,
+        key: int
+) -> Response:
+    headers: dict = request.headers  # request headers 
+    ...
+    # Body HTTP request
+    body: bytes = request.body  # The raw binary request body. 
+    dada: dict | list | None = request.data  # A deserialized body.
+    ...
+    # The path variables
+    args: dict = request.path_args  # Complete variables 
+    vars: dict = request.vars  # Variables not explicit used by function
+    ...
+    # The query_string parameters
+    query: dict = request.query_args  # Complete 
+    params: dict = request.params  # Incomplete
+    ...
+    return Response([])
+...
+```
+If you need a more explict variable declaration, you can declare it as a function parameter.
+Restfy will identify this value on Request path_args or query_args and set it.
+The query_args and path_args will not be affected by the Request params and vars will be.
+That attributes hold the values are not used as function parameter.
+Then, in the fragment above, the path_args will have the key value and the vars will be empty because key value is setted as a funcion parameter.
+
+The Request try parse the body bytes to data based on its content type.
+For example, if the request content type is a `application/json`, the data will set by json format.
+
+
+## Returning data
+
+If we are creating a server, it a fact we want return some data.
+It can be done by a Response instance object passing data attribute and optionality, the status and headers.
+In addition, we can just return a value that Restfy will try to create a Response object instance based on value type.
+
+The return also can be a tuple with value and the status code.
+
+That shortcuts are very useful for most common situations by when the data are a file body, we need create a Response instance with the correct content type.
+
+In the future Restfy release, probably will bring exclusive Response objects but will not cover all cases. 
+
+
 
 ```python
 from restfy.http import Response, Request
