@@ -1,4 +1,10 @@
 from httplus import Client
+from restfy.request import Request
+from restfy.response import Response
+
+__all__ = [
+    Request, Response, 'request', 'get', 'post', 'put', 'delete', 'patch'
+]
 
 
 async def request(
