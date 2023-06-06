@@ -181,7 +181,7 @@ async def handler_other(request: Request, pk: int) -> Response:
 
 
 
-### Middlewares
+## Middlewares
 
 Restfy uses middleware creating a class with .exec() method. 
 The parameter request must be passed into exec method.
@@ -208,10 +208,11 @@ app.register_middleware(DefaultMiddleware)
 
 ```
 
-### HTTP client requests
+## HTTP client requests
 
-With http module, you can realize asynchronous requests to other services.
+With http module, you can do asynchronous requests to other services.
 The most simple request can be seen below.
+
 ```python
 from restfy import http
 ...

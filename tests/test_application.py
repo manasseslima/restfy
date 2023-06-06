@@ -8,6 +8,7 @@ def test_application_instantiation():
         description='Used by test'
     )
     assert app.title == 'Test Application'
+    assert app.description == 'Used by test'
 
 
 

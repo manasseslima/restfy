@@ -125,7 +125,7 @@ class Application:
             response = await route.exec(request)
         return response
 
-    def register_middleware(self, middleware):
+    def register_middleware(self, middleware: type[Middleware]):
         instance = middleware()
         if self.middlewares:
             self.middlewares[-1].next = instance
