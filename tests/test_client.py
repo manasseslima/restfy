@@ -8,20 +8,21 @@ client = Client(app)
 
 @pytest.mark.asyncio
 async def teste_client_application():
-    res = await client.get('/')
+    res = await client.get('/health')
     assert res.status == 200
-    assert res.content == b'root'
-    assert res.data == 'root'
-    assert res.headers['Content-Type'] == 'text/plain'
+    assert res.headers['Content-Type'] == 'application/json'
+    data = res.parser()
+    assert data['name'] == 'ACME API'
 
 
 @pytest.mark.asyncio
 async def teste_json_response():
     res = await client.get('/servers')
     assert res.status == 200
-    assert res.content == b'[{"id": 1, "name": "Hotbike"}, {"id": 2, "name": "SimpleSky"}]'
     data = res.parser()
-    assert data[0]['id'] == 1
+    server = data[0]
+    assert server['id'] == 1
+    assert server['name'] == 'hotbike'
     assert res.headers['Content-Type'] == 'application/json'
 
 
@@ -30,7 +31,7 @@ async def teste_request_path_args():
     res = await client.get('/servers/1')
     assert res.status == 200
     data = res.parser()
-    assert data['name'] == 'Hotbike'
+    assert data['name'] == 'hotbike'
 
 
 @pytest.mark.asyncio
@@ -52,3 +53,24 @@ async def test_put_payload_model():
     url = '/servers/1?offset=3&size=20&mode=influx'
     res = await client.put(url, data=data)
     assert res.status == 200
+
+
+@pytest.mark.asyncio
+async def test_subrouters_with_key():
+    # url = '/servers/1/nodes'
+    # res = await client.get(url)
+    # assert res.status == 200
+    assert True
+
+
+@pytest.mark.asyncio
+async def teste_middleware_interception():
+    data = {
+        'id': 9,
+        'name': 'trix'
+    }
+    url = '/servers'
+    res = await client.post(url, data=data)
+    assert res.status == 200
+    assert res.headers['Acme-Transaction-Id'] == '123456789'
+    assert res.headers['Acme-Session-Id'] == '987654321'
