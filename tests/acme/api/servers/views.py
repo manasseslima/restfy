@@ -5,7 +5,7 @@ from .models import ServerModel
 
 
 router = Router()
-router.register_router('/{server-key}/nodes', nodes)
+router.register_router('/{key}/nodes', nodes)
 
 
 @router.get('')
@@ -29,7 +29,6 @@ async def get_servers_detail(
         request: Request,
         key: int
 ):
-    args = request.path_args,
     server = database['server'].get(key, {})
     return server
 

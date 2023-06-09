@@ -18,16 +18,19 @@ class Route:
         return f'{self.__class__}: {self.name}'
 
     def add_node(self, path, handle, method='GET', websocket=False):
+        handler = Handler(handle)
         node = path.pop(0)
         if websocket:
             method = 'GET'
         if node.startswith('{'):
+            name = node[1:-1]
             if self.variable:
+                handler.variable_name = name
                 route = self.variable
             else:
                 route = Route(websocket=websocket)
                 route.is_variable = True
-                route.name = node[1:-1]
+                route.name = name
                 self.variable = route
         else:
             route = self.routes.get(node, Route(websocket=websocket))
@@ -36,7 +39,10 @@ class Route:
         if path:
             route.add_node(path=path, handle=handle, method=method, websocket=websocket)
         else:
-            route.add_handler(handle, method)
+            # handlers = route.handlers if route.is_variable else self.handlers
+            route.handlers[method] = handler
+            # handlers[method] = handler
+            ...
 
     def add_handler(self, func, method: str):
         handler = Handler(func)
@@ -85,6 +91,15 @@ class Router(Route):
                 if len(nodes) == 0:
                     routes[node] = router
                     break
+                elif node.startswith('{'):
+                    if self.variable:
+                        route = self.variable
+                    else:
+                        route = Route()
+                        route.is_variable = True
+                        route.name = node[1:-1]
+                        self.variable = route
+                        routes = route.routes
                 else:
                     if node in routes:
                         if routes[node].routes:
@@ -112,9 +127,8 @@ class Router(Route):
                     args[route.name] = node
                 else:
                     break
-            else:
-                routes = route.routes
-                variable = route.variable
+            routes = route.routes
+            variable = route.variable
         if route:
             if method in route.handlers:
                 route.properties = args
