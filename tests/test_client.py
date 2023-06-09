@@ -57,9 +57,9 @@ async def test_put_payload_model():
 
 @pytest.mark.asyncio
 async def test_subrouters_with_key():
-    # url = '/servers/1/nodes'
-    # res = await client.get(url)
-    # assert res.status == 200
+    url = '/servers/1/nodes'
+    res = await client.get(url)
+    assert res.status == 200
     assert True
 
 

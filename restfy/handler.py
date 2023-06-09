@@ -7,6 +7,7 @@ class Handler:
     def __init__(self, func: callable):
         self.func: callable = func
         self.func_name: str = func.__name__
+        self.variable_name: str = ''
         self.parameters: dict = {}
         self.request_parameter: str = ''
         self.payload_parameter: str = ''
