@@ -6,8 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ## [Unreleased]
+
+
+## [0.4.1] - 2023-06-09
+### Added
+- New Request attributes vars and params to get path variables and query string parameters respectively.
+
 ### Updated
 - Documentation with model information.
+
+### Fixed
+- Fixed routers with variable errors. 
 
 ## [0.4.0] - 2023-05-31
 ### Add
