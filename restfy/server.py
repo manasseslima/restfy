@@ -24,6 +24,7 @@ class Server:
         if self.ssl_crt and self.ssl_key:
             context = ssl.SSLContext(ssl.PROTOCOL_TLS)
             context.load_cert_chain(self.ssl_crt, self.ssl_key)
+            context.set_alpn_protocols(['h2'])
         else:
             context = None
         server = await asyncio.start_server(
