@@ -17,6 +17,6 @@ app.register_middleware(AnotherMiddleware)
 if __name__ == '__main__':
     ssl_key = os.path.expanduser('~/localhost.key')
     ssl_crt = '/etc/ssl/certs/localhost.crt'
-    # server = Server(app=app, ssl_key=ssl_key, ssl_crt=ssl_crt)
-    server = Server(app=app)
+    server = Server(app=app, ssl_key=ssl_key, ssl_crt=ssl_crt)
+    # server = Server(app=app)
     server.run()

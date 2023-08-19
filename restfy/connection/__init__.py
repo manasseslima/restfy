@@ -9,7 +9,7 @@ from restfy.response import Response
 from restfy.middleware import Middleware
 from restfy.websocket import prepare_websocket
 from restfy.router import Router, Route
-from .frame import Frame, SettingFrame
+from .frame import get_frame, RSTStreamFrame
 
 
 class ConnectionStatus(enum.Enum):
@@ -136,16 +136,18 @@ class H2Connection(Connection):
 
     async def handler(self, data: bytes):
         data += await self.reader.read(8)
-        frame_header = await self.reader.read(9)
-        typo = frame_header[3]
-        match typo:
-            case 4: frame_cls = SettingFrame
-            case _: frame_cls = Frame
-        frame = frame_cls(length=frame_header[:3], flags=frame_header[4], identifier=frame_header[5:])
+        streams = {}
         while True:
-            chunk = await self.reader.read(4000)
-            chunk = frame.set_payload(chunk)
-            data += chunk
+            frame_header = await self.reader.read(9)
+            fme = get_frame(frame_header)
+            chunk = await self.reader.read(fme.length)
+            fme.set_payload(chunk)
+            if fme.stream not in streams:
+                streams[fme.stream] = {}
+            streams[fme.stream][fme.id] = fme
+            if isinstance(fme, RSTStreamFrame):
+                break
+        ...
 
 
 class H1Connection(Connection):
