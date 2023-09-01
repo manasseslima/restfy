@@ -1,6 +1,10 @@
 import enum
+import queue
 import uuid
-from .huffman import decode_huffman_code
+from collections import deque
+from typing import Any
+
+from .huffman import decode_huffman_code, encode_data_ruffman
 
 
 static_table = {
@@ -67,25 +71,69 @@ static_table = {
     61: 'www-authenticate',
 }
 
-
-def get_frame(frame_header: bytes):
-    frame = {
-        0: DataFrame,
-        1: HeaderFrame,
-        2: PriorityFrame,
-        3: RSTStreamFrame,
-        4: SettingFrame,
-        5: PushPromisseFrame,
-        6: PingFrame,
-        7: GoawayFrame,
-        8: WindowUpdateFrame,
-        9: ContinuationFrame,
-    }.get(frame_header[3], Frame)(
-        length=frame_header[:3],
-        flags=frame_header[4],
-        stream=frame_header[5:]
-    )
-    return frame
+static_table_code = {
+    'authority': 1,
+    'method:GET': 2,
+    'method:POST': 3,
+    'path:/': 4,
+    'path:/index.html': 5,
+    'scheme:http': 6,
+    'scheme:https': 7,
+    'status:200': 8,
+    'status:204': 9,
+    'status:206': 10,
+    'status:304': 11,
+    'status:400': 12,
+    'status:404': 13,
+    'status:500': 14,
+    'accept-charset': 15,
+    'accept-encoding:gzip, deflate': 16,
+    'accept-language': 17,
+    'accept-ranges': 18,
+    'accept': 19,
+    'access-control-allow-origin': 20,
+    'age': 21,
+    'allow': 22,
+    'authorization': 23,
+    'cache-control': 24,
+    'content-disposition': 25,
+    'content-encoding': 26,
+    'content-language': 27,
+    'content-length': 28,
+    'content-location': 29,
+    'content-range': 30,
+    'content-type': 31,
+    'cookie': 32,
+    'date': 33,
+    'etag': 34,
+    'expect': 35,
+    'expires': 36,
+    'from': 37,
+    'host': 38,
+    'if-match': 39,
+    'if-modified-since': 40,
+    'if-none-match': 41,
+    'if-range': 42,
+    'if-unmodified-since': 43,
+    'last-modified': 44,
+    'link': 45,
+    'location': 46,
+    'max-forwards': 47,
+    'proxy-authenticate': 48,
+    'proxy-authorization': 49,
+    'range': 50,
+    'referer': 51,
+    'refresh': 52,
+    'retry-after': 53,
+    'server': 54,
+    'set-cookie': 55,
+    'strict-transport-security': 56,
+    'transfer-encoding': 57,
+    'user-agent': 58,
+    'vary': 59,
+    'via': 60,
+    'www-authenticate': 61,
+}
 
 
 class Frame:
@@ -94,12 +142,15 @@ class Frame:
     flags: int
     stream: int
     payload_size: int
+    payload: ...
 
-    def __init__(self, length: bytes, flags: chr, stream: bytes):
+    def __init__(self, length: bytes, flags: int, stream: bytes, connection: Any):
         self.id = uuid.uuid4()
         self.length = int.from_bytes(length, byteorder='big', signed=False)
         self.flags = flags
         self.stream = int.from_bytes(stream, byteorder='big', signed=False)
+        self.payload = None
+        self.connection = connection
         ...
 
     def __str__(self):
@@ -110,6 +161,14 @@ class Frame:
 
     def set_payload(self, chunk: bytes):
         ...
+
+    def generate(self) -> bytes:
+        ret = b''
+        ret += self.length.to_bytes(3, byteorder='big', signed=False)
+        ret += self.type.to_bytes(1, byteorder='big', signed=False)
+        ret += self.flags.to_bytes(1, byteorder='big', signed=False)
+        ret += self.stream.to_bytes(4, byteorder='big', signed=False)
+        return ret
 
 
 class SettingPayload:
@@ -147,9 +206,23 @@ class DataFrame(Frame):
     }
     """
     type = 0x00
+    end_stream = False
+    padded = False
+
+    def __init__(self, length: bytes, flags: int, stream: bytes, connection: Any):
+        super().__init__(length, flags, stream, connection)
+        self.padded = bool(0b00001000 & self.flags)
+        self.end_stream = bool(0b00000001 & self.flags)
+        ...
 
     def set_payload(self, value: bytes):
-        ...
+        body = value
+        self.payload = body
+
+    def generate(self) -> bytes:
+        ret = super().generate()
+        ret += self.payload
+        return ret
 
 
 class HeaderFrame(Frame):
@@ -180,41 +253,97 @@ class HeaderFrame(Frame):
     }
     """
     type = 0x01
+    priority = False
+    padded = False
+    end_headers = False
+    end_stream = False
+
+    def __init__(self, length: bytes, flags: int, stream: bytes, connection: Any):
+        super().__init__(length, flags, stream, connection)
+        self.priority = bool(0b0010000 & self.flags)
+        self.padded = bool(0b00001000 & self.flags)
+        self.end_headers = bool(0b00000100 & self.flags)
+        self.end_stream = bool(0b00000001 & self.flags)
 
     def set_payload(self, value: bytes):
         headers = {}
         p = 0
         while True:
             bc = value[p]
-            bits = f'{str(bin(bc))[2:]:0>8}'
+            if bc == 15:
+                p += 1
+                pc = value[p]
+                bc += pc
+            bits = f'{bin(bc)[2:]:0>8}'
             mode = bits[:2]
             code = bits[2:]
-            val = static_table.get(int(code, 2), '')
+            key_code = int(code, 2)
+            if key_code > 61:
+                key = self.connection.get_dynamic_table_element(key_code)
+            else:
+                key = static_table.get(key_code, '')
             if mode == '10':
-                if val:
-                    splt = val.split(':')
+                if key:
+                    splt = key.split(':')
                     if len(splt) > 1:
                         headers[splt[0]] = splt[1]
                 p += 1
             else:
                 p += 1
                 bs = value[p]
-                bits_bs = f'{str(bin(bs))[2:]:0>8}'
-                mode_bs = bits_bs[:2]
-                size = int(bits_bs[2:], 2)
+                bits_bs = f'{bin(bs)[2:]:0>8}'
+                mode_bs = bits_bs[:1]
+                size = int(bits_bs[1:], 2)
                 p += 1
                 t = p + size
                 v = value[p: t]
-                if mode_bs == '00':
+                if mode_bs == '0':
                     val_bs = v.decode()
+                    if mode == '00':
+                        val_bs = int(v)
                 else:
                     val_bs = decode_huffman_code(v)
                 p = t
-                splt = val.split(':')
+                splt = key.split(':', maxsplit=1)
                 headers[splt[0]] = val_bs
+                if mode == '01':
+                    self.connection.add_dynamic_table_element(f'{key}:{val_bs}')
             if p >= len(value):
                 break
-        ...
+        self.payload = headers
+
+    def generate(self) -> bytes:
+        ret = super().generate()
+        for k, val in self.payload.items():
+            key = k.lower()
+            typo = 64
+            if k in ['status']:
+                key += f':{val}'
+                typo = 128
+            code = static_table_code.get(key, '')
+            if code:
+                if code > 31:
+                    md = (typo + 31).to_bytes(1, 'big', signed=False)
+                    i = code - 31
+                    if i >= 128:
+                        rt = (i % 128).to_bytes(1, 'big', signed=False)
+                        ml = (128 + (i // 128)).to_bytes(1, 'big', signed=False)
+                        md += ml + rt
+                    else:
+                        md += i
+                else:
+                    md = (typo + code).to_bytes(1, 'big', signed=False)
+                ret += md
+                if typo == 64:
+                    ec = encode_data_ruffman(val)
+                    sz = (128 + len(ec)).to_bytes(1, 'big', signed=False)
+                    ret += sz
+                    ret += ec
+                elif typo == 128:
+                   ...
+            else:
+                ...
+        return ret
 
 
 class PriorityFrame(Frame):

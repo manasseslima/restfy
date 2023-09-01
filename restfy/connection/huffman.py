@@ -1,4 +1,4 @@
-
+from typing import Any
 
 encode = {
     ' ': '010100',
@@ -218,6 +218,20 @@ def decode_huffman_code(val: bytes) -> str:
     return ret
 
 
+def encode_data_ruffman(value: Any) -> bytes:
+    ret = b''
+    if isinstance(value, str):
+        ac = ''
+        for c in value:
+            bts = encode.get(c, '')
+            ac += bts
+        ret = int(ac, 2).to_bytes(len(ac)//8, 'big', signed=False)
+    else:
+        ...
+    return ret
+
+
 if __name__ == '__main__':
     bitstr = decode_huffman_code(b'Manasses Lima')
     print(bitstr)
+    ec = encode_data_ruffman('manasses lima')
