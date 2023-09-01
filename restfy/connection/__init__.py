@@ -1,15 +1,17 @@
 import asyncio
 import datetime
 import enum
+import queue
 import time
 import uuid
+from collections import deque
 
 from restfy.request import Request, AccessControl
 from restfy.response import Response
 from restfy.middleware import Middleware
 from restfy.websocket import prepare_websocket
 from restfy.router import Router, Route
-from .frame import get_frame, RSTStreamFrame
+from restfy.connection import frame
 
 
 class ConnectionStatus(enum.Enum):
@@ -133,21 +135,100 @@ class H2Connection(Connection):
     ):
         super().__init__(reader=reader, writer=writer)
         self.frames = {}
+        self.dynamic_table = deque()
+
+    @staticmethod
+    def get_frame(frame_header: bytes, connection: 'H2Connection'):
+        frm = {
+            0: frame.DataFrame,
+            1: frame.HeaderFrame,
+            2: frame.PriorityFrame,
+            3: frame.RSTStreamFrame,
+            4: frame.SettingFrame,
+            5: frame.PushPromisseFrame,
+            6: frame.PingFrame,
+            7: frame.GoawayFrame,
+            8: frame.WindowUpdateFrame,
+            9: frame.ContinuationFrame,
+        }.get(frame_header[3], frame.Frame)(
+            length=frame_header[:3],
+            flags=frame_header[4],
+            stream=frame_header[5:],
+            connection=connection
+        )
+        return frm
+
+    def add_dynamic_table_element(self, value: str):
+        self.dynamic_table.appendleft(value)
+
+    def get_dynamic_table_element(self, key):
+        return self.dynamic_table[key - 61]
 
     async def handler(self, data: bytes):
         data += await self.reader.read(8)
         streams = {}
         while True:
             frame_header = await self.reader.read(9)
-            fme = get_frame(frame_header)
+            fme = self.get_frame(frame_header, self)
             chunk = await self.reader.read(fme.length)
             fme.set_payload(chunk)
             if fme.stream not in streams:
-                streams[fme.stream] = {}
-            streams[fme.stream][fme.id] = fme
-            if isinstance(fme, RSTStreamFrame):
+                streams[fme.stream] = {'frames': {}}
+            streams[fme.stream]['frames'][fme.id] = fme
+            if isinstance(fme, frame.HeaderFrame):
+                headers = fme.payload
+                method = headers.pop('method')
+                version = '2'
+                url = headers['path']
+                request = self.generate_request(url=url, method=method, version=version)
+                for k, v in headers.items():
+                    request.add_header(k, v)
+                streams[fme.stream]['request'] = request
+                if method == 'GET' and fme.end_headers:
+                    await self.process_response(request, stream=fme.stream)
+            if isinstance(fme, frame.DataFrame):
+                request = streams[fme.stream]['request']
+                request.body = fme.payload
+                if fme.end_stream:
+                    await self.process_response(request, stream=fme.stream)
+            if isinstance(fme, frame.RSTStreamFrame):
                 break
         ...
+
+    async def process_response(self, request: Request, stream: int):
+        response: Response = await self.execute_handler(request=request)
+        header_block = self.generate_header_frame_block(response=response, stream=stream)
+        self.writer.write(header_block)
+        data_block = self.generate_data_frame_block(response=response, stream=stream)
+        self.writer.write(data_block)
+        await self.writer.drain()
+        diff = time.time_ns() - self.ini
+        self.print_request(self.start, request.method, request.url, response, diff)
+
+    @staticmethod
+    def generate_data_frame_block(response: Response, stream: int) -> bytes:
+        data = response.data.encode()
+        data_fme = frame.DataFrame(
+            length=len(data).to_bytes(3, byteorder='big', signed=False),
+            flags=0b00000000,
+            stream=stream.to_bytes(4, byteorder='big', signed=False)
+        )
+        data_fme.payload = data
+        block = data_fme.generate()
+        return block
+
+    @staticmethod
+    def generate_header_frame_block(response: Response, stream: int) -> bytes:
+        data_fme = frame.HeaderFrame(
+            length=b'\x00\x00\x00',
+            flags=0b00000000,
+            stream=stream.to_bytes(4, byteorder='big', signed=False)
+        )
+        headers = response.headers
+        headers['status'] = response.status
+        data_fme.payload = headers
+        block = data_fme.generate()
+        return block
 
 
 class H1Connection(Connection):

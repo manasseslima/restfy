@@ -62,23 +62,24 @@ class Request:
 
     def add_header(self, key, value):
         self.headers[key] = value
-        if key == 'Content-Type':
-            if 'multipart/form-data' in value:
-                self.multipart = True
-                (content, boundary) = value.split(';')
-                self.type = content.strip()
-                self.boundary = boundary.replace('boundary=', '').strip()
-            else:
-                self.type = mime_types.get(value, 'plain')
-        elif key == 'Content-Length':
-            self.length = int(value)
-        elif key == 'Origin':
-            self.origin = value
-            self.preflight = True if self.method == 'OPTIONS' else False
-        elif key == 'Access-Control-Request-Method':
-            self.request_method = value
-        elif key == 'Access-Control-Request-Headers':
-            self.request_headers = value
+        match key.lower():
+            case 'content-type':
+                if 'multipart/form-data' in value:
+                    self.multipart = True
+                    (content, boundary) = value.split(';')
+                    self.type = content.strip()
+                    self.boundary = boundary.replace('boundary=', '').strip()
+                else:
+                    self.type = mime_types.get(value, 'plain')
+            case 'content-length':
+                self.length = int(value)
+            case 'origin':
+                self.origin = value
+                self.preflight = True if self.method == 'OPTIONS' else False
+            case 'access-control-request-method':
+                self.request_method = value
+            case 'access-control-request-headers':
+                self.request_headers = value
 
     def dict(self):
         return self.decode_data()
