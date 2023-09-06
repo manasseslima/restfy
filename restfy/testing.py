@@ -1,5 +1,7 @@
+import asyncio.streams
 import json
 from .application import Application, Response
+from .connection import Connection
 
 
 class Client:
@@ -14,7 +16,11 @@ class Client:
             headers: dict = None
     ) -> Response:
         headers = headers or {}
-        req = self.app.generate_request(url=url, method=method, version='http/1.1')
+        con = Connection(reader=None, writer=None)
+        con.router = self.app.router
+        con.middlewares = self.app.middlewares
+        req = con.generate_request(url=url, method=method, version='http/1.1')
+        req.app = self.app
         for k, v in headers.items():
             req.add_header(k, v)
         content_type = req.headers.get('Content-Type', '')
@@ -28,7 +34,7 @@ class Client:
             if content_type == 'application/json' and not isinstance(data, bytes):
                 req.body = json.dumps(data).encode()
                 req.add_header('Content-Length', len(req.body))
-        res = await self.app.execute_handler(req)
+        res = await con.execute_handler(req)
         res.render()
         return res
 

@@ -26,8 +26,8 @@ class Connection:
     def __init__(
             self,
             *,
-            reader: asyncio.StreamReader,
-            writer: asyncio.StreamWriter,
+            reader: asyncio.StreamReader | None,
+            writer: asyncio.StreamWriter | None,
     ):
         self.id: uuid.UUID = uuid.uuid4()
         self.start = datetime.datetime.now()
