@@ -225,7 +225,13 @@ def encode_data_ruffman(value: Any) -> bytes:
         for c in value:
             bts = encode.get(c, '')
             ac += bts
-        ret = int(ac, 2).to_bytes(len(ac)//8, 'big', signed=False)
+            if len(ac) >= 8:
+                pc = ac[:8]
+                ac = ac[8:]
+                ret += int(pc, 2).to_bytes(1, 'big', signed=False)
+        if ac:
+            ac = ac.ljust(8, '1')
+            ret += int(ac, 2).to_bytes(1, 'big', signed=False)
     else:
         ...
     return ret

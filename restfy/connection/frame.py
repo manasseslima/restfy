@@ -314,14 +314,22 @@ class HeaderFrame(Frame):
 
     def generate(self) -> bytes:
         ret = super().generate()
+        dtk = ('status', 'location', 'date', 'cache-control')
         for k, val in self.payload.items():
             key = k.lower()
             typo = 64
-            if k in ['status']:
-                key += f':{val}'
+            if k in dtk:
+                key_val = f'{key}:{val}'
                 typo = 128
-            code = static_table_code.get(key, '')
-            if code:
+                code = static_table_code.get(key_val, '')
+            else:
+                code = static_table_code.get(key, '')
+            if not code:
+                ec = encode_data_ruffman(key)
+                sz = (128 + len(ec)).to_bytes(1, 'big', signed=False)
+                ret += sz
+                ret += ec
+            else:
                 if code > 31:
                     md = (typo + 31).to_bytes(1, 'big', signed=False)
                     i = code - 31
@@ -334,15 +342,30 @@ class HeaderFrame(Frame):
                 else:
                     md = (typo + code).to_bytes(1, 'big', signed=False)
                 ret += md
-                if typo == 64:
+            if isinstance(val, str):
+                if len(val) > 5:
                     ec = encode_data_ruffman(val)
-                    sz = (128 + len(ec)).to_bytes(1, 'big', signed=False)
-                    ret += sz
-                    ret += ec
-                elif typo == 128:
-                   ...
+                else:
+                    ec = val
+                sz = (128 + len(ec)).to_bytes(1, 'big', signed=False)
+                ret += sz
+                ret += ec
             else:
-                ...
+                if val < 128:
+                    ret += val.to_bytes(1, 'big', signed=False)
+                else:
+                    pre = val - 31
+                    ret += int(31).to_bytes(1, 'big', signed=False)
+                    if pre < 128:
+                        ret += pre.to_bytes(1, 'big', signed=False)
+                    else:
+                        rst = pre % 128
+                        mul = pre // 128
+                        while mul >= 128:
+                            mul -= 127
+                            ret += (128 + 127).to_bytes(1, 'big', signed=False)
+                        ret += mul.to_bytes(1, 'big', signed=False)
+                        ret += rst.to_bytes(1, 'big', signed=False)
         return ret
 
 
