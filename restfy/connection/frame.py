@@ -312,8 +312,8 @@ class HeaderFrame(Frame):
                 break
         self.payload = headers
 
-    def generate(self) -> bytes:
-        ret = super().generate()
+    def encode_payload(self) -> bytes:
+        ret = b''
         dtk = ('status', 'location', 'date', 'cache-control')
         for k, val in self.payload.items():
             key = k.lower()
@@ -367,6 +367,13 @@ class HeaderFrame(Frame):
                         ret += mul.to_bytes(1, 'big', signed=False)
                         ret += rst.to_bytes(1, 'big', signed=False)
         return ret
+
+    def generate(self) -> bytes:
+        enc = self.encode_payload()
+        self.length = len(enc)
+        hea = super().generate()
+        block = hea + enc
+        return block
 
 
 class PriorityFrame(Frame):
