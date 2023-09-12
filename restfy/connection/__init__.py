@@ -197,11 +197,8 @@ class H2Connection(Connection):
 
     async def process_response(self, request: Request, stream: int):
         response: Response = await self.execute_handler(request=request)
-        header_block = self.generate_header_frame_block(response=response, stream=stream)
-        self.writer.write(header_block)
-        await self.writer.drain()
-        data_block = self.generate_data_frame_block(response=response, stream=stream)
-        self.writer.write(data_block)
+        self.generate_header_frame_block(response=response, stream=stream)
+        self.generate_data_frame_block(response=response, stream=stream)
         await self.writer.drain()
         diff = time.time_ns() - self.ini
         self.print_request(self.start, request.method, request.url, response, diff)
@@ -210,13 +207,13 @@ class H2Connection(Connection):
         data = response.data.encode()
         data_fme = frame.DataFrame(
             length=len(data).to_bytes(3, byteorder='big', signed=False),
-            flags=0b00000000,
+            flags=0b00000001,
             stream=stream.to_bytes(4, byteorder='big', signed=False),
             connection=self
         )
         data_fme.payload = data
         block = data_fme.generate()
-        return block
+        self.writer.write(block)
 
     def generate_header_frame_block(self, response: Response, stream: int) -> bytes:
         fme = frame.HeaderFrame(
@@ -229,7 +226,7 @@ class H2Connection(Connection):
         headers['status'] = response.status
         fme.payload = headers
         block = fme.generate()
-        return block
+        self.writer.write(block)
 
 
 class H1Connection(Connection):
