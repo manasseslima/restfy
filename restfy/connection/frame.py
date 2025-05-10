@@ -145,7 +145,7 @@ class Frame:
     payload: ...
 
     def __init__(self, length: bytes, flags: int, stream: bytes, connection: Any):
-        self.id = uuid.uuid4()
+        self.id = str(uuid.uuid4())
         self.length = int.from_bytes(length, byteorder='big', signed=False)
         self.flags = flags
         self.stream = int.from_bytes(stream, byteorder='big', signed=False)
@@ -171,10 +171,13 @@ class Frame:
         return ret
 
 
-class SettingPayload:
-    def __init__(self, identifier: bytes, value: bytes):
-        self.identifier = identifier
-        self.value = value
+class SettingConfig:
+    header_table_size = 4096
+    enable_push = 0
+    max_concurrent_streams = 0
+    initial_window_size = 65535
+    max_frame_size = 16384
+    max_header_list_size = 0
 
 
 class SettingsEnum(enum.Enum):
@@ -266,6 +269,9 @@ class HeaderFrame(Frame):
         self.end_stream = bool(0b00000001 & self.flags)
 
     def set_payload(self, value: bytes):
+        self.payload = self.decode_payload(value=value)
+
+    def decode_payload(self, value: bytes):
         headers = {}
         p = 0
         while True:
@@ -289,7 +295,20 @@ class HeaderFrame(Frame):
                         headers[splt[0]] = splt[1]
                 p += 1
             else:
-                p += 1
+                nk = True if not key else False
+                if nk:
+                    p += 1
+                    bs = value[p]
+                    bits_bs = f'{bin(bs)[2:]:0>8}'
+                    mode_bs = bits_bs[:1]
+                    size = int(bits_bs[1:], 2)
+                    p += 1
+                    t = p + size
+                    v = value[p: t]
+                    key = decode_huffman_code(v)
+                    p = t
+                else:
+                    p += 1
                 bs = value[p]
                 bits_bs = f'{bin(bs)[2:]:0>8}'
                 mode_bs = bits_bs[:1]
@@ -298,39 +317,51 @@ class HeaderFrame(Frame):
                 t = p + size
                 v = value[p: t]
                 if mode_bs == '0':
-                    val_bs = v.decode()
                     if mode == '00':
-                        val_bs = int(v)
+                        val_bs = int.from_bytes(v)
+                    else:
+                        val_bs = v.decode()
                 else:
                     val_bs = decode_huffman_code(v)
                 p = t
                 splt = key.split(':', maxsplit=1)
                 headers[splt[0]] = val_bs
                 if mode == '01':
-                    self.connection.add_dynamic_table_element(f'{key}:{val_bs}')
+                    self.connection.add_dynamic_table_element((key, val_bs))
             if p >= len(value):
                 break
-        self.payload = headers
+        return headers
 
     def encode_payload(self) -> bytes:
         ret = b''
-        dtk = ('status', 'location', 'date', 'cache-control')
+        dtk = {
+            'status': [200, 204, 206, 304, 400, 404, 500] ,
+            'location': [], 
+            'date': [], 
+            'cache-control': []
+        }
         for k, val in self.payload.items():
             key = k.lower()
-            typo = 64
-            if k in dtk:
+            typo = 64 if isinstance(val, str) else 0
+            if key in dtk and val in dtk[key]:
                 key_val = f'{key}:{val}'
                 typo = 128
                 code = static_table_code.get(key_val, '')
+                ec = (128 + code).to_bytes(1)
+                ret += ec
+                continue
             else:
                 code = static_table_code.get(key, '')
             if not code:
                 ec = encode_data_ruffman(key)
-                sz = (128 + len(ec)).to_bytes(1, 'big', signed=False)
+                sz = (0).to_bytes(1, 'big', signed=False)
+                ret += sz
+                sz = (len(ec)).to_bytes(1, 'big', signed=False)
                 ret += sz
                 ret += ec
             else:
                 if code > 31:
+                    typo = 64
                     md = (typo + 31).to_bytes(1, 'big', signed=False)
                     i = code - 31
                     if i >= 128:
@@ -345,14 +376,19 @@ class HeaderFrame(Frame):
             if isinstance(val, str):
                 if len(val) > 5:
                     ec = encode_data_ruffman(val)
+                    typo = 128
                 else:
                     ec = val
-                sz = (128 + len(ec)).to_bytes(1, 'big', signed=False)
+                    typo = 0
+                sz = (typo + len(ec)).to_bytes(1, 'big', signed=False)
                 ret += sz
                 ret += ec
             else:
                 if val < 128:
-                    ret += val.to_bytes(1, 'big', signed=False)
+                    bv = val.to_bytes(1, 'big', signed=False)
+                    sz = len(bv)
+                    ret += sz.to_bytes(1, 'big', signed=False)
+                    ret += bv
                 else:
                     pre = val - 31
                     ret += int(31).to_bytes(1, 'big', signed=False)
@@ -366,6 +402,8 @@ class HeaderFrame(Frame):
                             ret += (128 + 127).to_bytes(1, 'big', signed=False)
                         ret += mul.to_bytes(1, 'big', signed=False)
                         ret += rst.to_bytes(1, 'big', signed=False)
+        if ret:
+            p = self.decode_payload(ret)
         return ret
 
     def generate(self) -> bytes:
@@ -433,15 +471,29 @@ class SettingFrame(Frame):
     }
     """
     type = 0x04
-    payload: SettingPayload
     payload_size = 6
+    payload: SettingConfig
 
     def set_payload(self, value: bytes):
-        payload = SettingPayload(
-            identifier=value[:2],
-            value=value[2:]
-        )
-        self.payload = payload
+        self.payload = SettingConfig()
+        p = 0
+        while p < len(value):
+            k = value[p + 1:p + 2]
+            v = value[p + 2:p + 6]
+            match k:
+                case b'\x01':
+                    self.payload.header_table_size = int.from_bytes(v)
+                case b'\x02':
+                    self.payload.enable_push = v == b'\x00\x00\x00\x01'
+                case b'\x03':
+                    self.payload.max_concurrent_streams = int.from_bytes(v)
+                case b'\x04':
+                    self.payload.initial_window_size = int.from_bytes(v)
+                case b'\x05':
+                    self.payload.max_frame_size = int.from_bytes(v)
+                case b'\x02':
+                    self.payload.max_header_list_size = int.from_bytes(v)
+            p += 6
 
 
 class PushPromisseFrame(Frame):
@@ -522,6 +574,9 @@ class WindowUpdateFrame(Frame):
     }
     """
     type = 0x08
+
+    def set_payload(self, value: bytes):
+        self.payload = int.from_bytes(value)
 
 
 class ContinuationFrame(Frame):

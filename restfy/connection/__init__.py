@@ -123,7 +123,7 @@ class Connection:
         }
         method_color = methods_color.get(method, '')
         print(f'[{start.isoformat()[:-3]}]{colors.get(method_color, colors["gray"])} {method} {url} '
-              f'--> {colors.get(color_response, "")}{response.status}: {diff / (1_000_000)} ms\033[0m')
+            f'--> {colors.get(color_response, "")}{response.status}: {diff / (1_000_000)} ms\033[0m')
 
 
 class H2Connection(Connection):
@@ -135,7 +135,7 @@ class H2Connection(Connection):
     ):
         super().__init__(reader=reader, writer=writer)
         self.frames = {}
-        self.dynamic_table = deque()
+        self.dynamic_table = []
 
     @staticmethod
     def get_frame(frame_header: bytes, connection: 'H2Connection'):
@@ -159,61 +159,101 @@ class H2Connection(Connection):
         return frm
 
     def add_dynamic_table_element(self, value: str):
-        self.dynamic_table.appendleft(value)
+        self.dynamic_table.append(value)
 
     def get_dynamic_table_element(self, key):
         return self.dynamic_table[key - 61]
 
     async def handler(self, data: bytes):
         data += await self.reader.read(8)
+        blk = b'\x00\x00\x00\x04\x00\x00\x00\x00\x00'
+        self.writer.write(blk)
+        settings = frame.SettingConfig()
         streams = {}
         while True:
-            frame_header = await self.reader.read(9)
+            try:
+                frame_header = await self.reader.read(9)
+            except Exception as e:
+                break
+            if not frame_header:
+                continue
             fme = self.get_frame(frame_header, self)
             chunk = await self.reader.read(fme.length)
+            if not chunk:
+                continue
             fme.set_payload(chunk)
             if fme.stream not in streams:
                 streams[fme.stream] = {'frames': {}}
             streams[fme.stream]['frames'][fme.id] = fme
-            if isinstance(fme, frame.HeaderFrame):
-                headers = fme.payload
-                method = headers.pop('method')
-                version = '2'
-                url = headers['path']
-                request = self.generate_request(url=url, method=method, version=version)
-                for k, v in headers.items():
-                    request.add_header(k, v)
-                streams[fme.stream]['request'] = request
-                if method == 'GET' and fme.end_headers:
-                    await self.process_response(request, stream=fme.stream)
-            if isinstance(fme, frame.DataFrame):
-                request = streams[fme.stream]['request']
-                request.body = fme.payload
-                if fme.end_stream:
-                    await self.process_response(request, stream=fme.stream)
-            if isinstance(fme, frame.RSTStreamFrame):
-                break
-        ...
+            match fme:
+                case frame.HeaderFrame():
+                    headers = fme.payload
+                    method = headers.pop('method')
+                    version = '2'
+                    url = headers['path']
+                    request = self.generate_request(url=url, method=method, version=version)
+                    for k, v in headers.items():
+                        request.add_header(k, v)
+                    streams[fme.stream]['request'] = request
+                    if method == 'GET' and fme.end_headers:
+                        await self.process_response(request, stream=fme.stream)
+                case frame.DataFrame():
+                    request = streams[fme.stream]['request']
+                    request.body = fme.payload
+                    if fme.end_stream:
+                        await self.process_response(request, stream=fme.stream)
+                case frame.RSTStreamFrame():
+                    break
+                case frame.GoawayFrame():
+                    break
+                case frame.WindowUpdateFrame():
+                    settings.initial_window_size = fme.payload
+                case frame.PingFrame():
+                    ...
+                case frame.ContinuationFrame():
+                    ...
+                case frame.PushPromisseFrame():
+                    ...
+                case frame.PriorityFrame():
+                    ...
+                case frame.SettingFrame():
+                    settings = fme.payload
+                    if fme.flags == 0:
+                        blk = b'\x00\x00\x00\x04\x01\x00\x00\x00\x00'
+                        self.writer.write(blk)
+                        await self.writer.drain()
+        await self.close()
+
+    def validate_bulk(self, bulk: bytes) -> bool:
+        frame_header = bulk[:9]
+        fme = self.get_frame(frame_header, self)
+        chunk = bulk[9:fme.length - 9]
+        fme.set_payload(chunk)
+        return True
 
     async def process_response(self, request: Request, stream: int):
         response: Response = await self.execute_handler(request=request)
-        self.generate_header_frame_block(response=response, stream=stream)
-        self.generate_data_frame_block(response=response, stream=stream)
+        blk = self.generate_header_frame_block(response=response, stream=stream)
+        self.writer.write(blk)
+        await self.writer.drain()
+        blk = self.generate_data_frame_block(response=response, stream=stream)
+        self.writer.write(blk)
         await self.writer.drain()
         diff = time.time_ns() - self.ini
         self.print_request(self.start, request.method, request.url, response, diff)
+        ...
 
     def generate_data_frame_block(self, response: Response, stream: int) -> bytes:
         data = response.data.encode()
-        data_fme = frame.DataFrame(
+        fme = frame.DataFrame(
             length=len(data).to_bytes(3, byteorder='big', signed=False),
             flags=0b00000001,
             stream=stream.to_bytes(4, byteorder='big', signed=False),
             connection=self
         )
-        data_fme.payload = data
-        block = data_fme.generate()
-        self.writer.write(block)
+        fme.payload = data
+        block = fme.generate()
+        return block
 
     def generate_header_frame_block(self, response: Response, stream: int) -> bytes:
         fme = frame.HeaderFrame(
@@ -223,10 +263,15 @@ class H2Connection(Connection):
             connection=self
         )
         headers = response.headers
-        headers['status'] = response.status
+        headers['Status'] = response.status
         fme.payload = headers
-        block = fme.generate()
-        self.writer.write(block)
+        blk = fme.generate()
+        h = blk[:9]
+        p = blk[9:]
+        l = len(p)
+        vfm = self.get_frame(h, self)
+        vfm.set_payload(p)
+        return blk
 
 
 class H1Connection(Connection):
