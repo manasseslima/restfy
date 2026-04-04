@@ -195,7 +195,7 @@ class H2Connection(Connection):
                     for k, v in headers.items():
                         request.add_header(k, v)
                     streams[fme.stream]['request'] = request
-                    if method == 'GET' and fme.end_headers:
+                    if fme.end_stream:
                         await self.process_response(request, stream=fme.stream)
                 case frame.DataFrame():
                     request = streams[fme.stream]['request']
@@ -227,7 +227,7 @@ class H2Connection(Connection):
     def validate_bulk(self, bulk: bytes) -> bool:
         frame_header = bulk[:9]
         fme = self.get_frame(frame_header, self)
-        chunk = bulk[9:fme.length - 9]
+        chunk = bulk[9:9 + fme.length]
         fme.set_payload(chunk)
         return True
 

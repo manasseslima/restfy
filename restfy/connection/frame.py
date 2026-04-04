@@ -327,7 +327,7 @@ class HeaderFrame(Frame):
                 splt = key.split(':', maxsplit=1)
                 headers[splt[0]] = val_bs
                 if mode == '01':
-                    self.connection.add_dynamic_table_element((key, val_bs))
+                    self.connection.add_dynamic_table_element(f'{key}:{val_bs}')
             if p >= len(value):
                 break
         return headers
@@ -356,7 +356,7 @@ class HeaderFrame(Frame):
                 ec = encode_data_ruffman(key)
                 sz = (0).to_bytes(1, 'big', signed=False)
                 ret += sz
-                sz = (len(ec)).to_bytes(1, 'big', signed=False)
+                sz = (0x80 | len(ec)).to_bytes(1, 'big', signed=False)
                 ret += sz
                 ret += ec
             else:
@@ -369,7 +369,7 @@ class HeaderFrame(Frame):
                         ml = (128 + (i // 128)).to_bytes(1, 'big', signed=False)
                         md += ml + rt
                     else:
-                        md += i
+                        md += i.to_bytes(1, 'big', signed=False)
                 else:
                     md = (typo + code).to_bytes(1, 'big', signed=False)
                 ret += md
@@ -378,7 +378,7 @@ class HeaderFrame(Frame):
                     ec = encode_data_ruffman(val)
                     typo = 128
                 else:
-                    ec = val
+                    ec = val.encode('ascii')
                     typo = 0
                 sz = (typo + len(ec)).to_bytes(1, 'big', signed=False)
                 ret += sz
@@ -491,7 +491,7 @@ class SettingFrame(Frame):
                     self.payload.initial_window_size = int.from_bytes(v)
                 case b'\x05':
                     self.payload.max_frame_size = int.from_bytes(v)
-                case b'\x02':
+                case b'\x06':
                     self.payload.max_header_list_size = int.from_bytes(v)
             p += 6
 
