@@ -85,23 +85,19 @@ class Request:
         return self.decode_data()
 
     def decode_data(self):
+        if self.data:
+            return self.data
         if self.body:
             if self.type == 'json':
-                return json.loads(self.body)
+                self.data = json.loads(self.body)
             elif self.type == 'form-data':
-                return self._process_form_data()
+                self.data = self._process_form_data()
             elif self.type == 'x-www-form-urlencoded':
-                return self._url_decoded_data()
-        return {}
+                self.data = self._url_decoded_data()
+        return self.data
 
     def args(self):
-        args = {}
-        if self.query:
-            pairs = self.query.split('&')
-            for pair in pairs:
-                (key, value) = pair.split('=')
-                args[key] = value
-        return args
+        return self.query_args
 
     def prepare_data(self):
         self.data = self.decode_data()

@@ -291,16 +291,7 @@ class H1Connection(Connection):
                 splt = header.split(':', maxsplit=1)
                 request.add_header(key=splt[0].strip(), value=splt[1].strip())
             if request.length:
-                length = request.length
-                size = length if length <= 1000 else 1000
-                content = b''
-                while True:
-                    content += await self.reader.read(size)
-                    length -= size
-                    if length == 0:
-                        break
-                    size = length if length <= 1000 else 1000
-                request.body = content
+                request.body = await self.reader.readexactly(request.length)
             if request.preflight:
                 response = Response(status=204)
                 response.headers.update(self.cors.get_response_headers())
