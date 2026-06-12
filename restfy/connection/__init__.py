@@ -5,6 +5,7 @@ import queue
 import time
 import uuid
 from collections import deque
+from urllib.parse import parse_qsl
 
 from restfy.request import Request, AccessControl
 from restfy.response import Response
@@ -88,18 +89,9 @@ class Connection:
         request.params = {**args}
         return request
 
-    def extract_arguments(self, query):
-        ret = {}
-        if query:
-            pairs = query.split('&')
-            for pair in pairs:
-                (key, value) = tuple(pair.split('='))
-                ret[key] = self.argument_decode(value)
-        return ret
-
     @staticmethod
-    def argument_decode(value):
-        return value
+    def extract_arguments(query: str) -> dict:
+        return dict(parse_qsl(query, keep_blank_values=True))
 
     @staticmethod
     def print_request(start, method, url, response, diff):
