@@ -17,20 +17,17 @@ class Route:
         return f'{self.__class__}: {self.name}'
 
     def add_node(self, path, handle, method='GET', websocket=False):
-        handler = Handler(handle)
         node = path.pop(0)
         if websocket:
             method = 'GET'
         if node.startswith('{'):
-            name = node[1:-1]
-            if self.variable:
-                handler.variable_name = name
-                route = self.variable
-            else:
+            if not self.variable:
                 route = Route(websocket=websocket)
                 route.is_variable = True
-                route.name = name
+                route.name = node[1:-1]
                 self.variable = route
+            else:
+                route = self.variable
         else:
             route = self.routes.get(node, Route(websocket=websocket))
             route.name = node
@@ -38,10 +35,7 @@ class Route:
         if path:
             route.add_node(path=path, handle=handle, method=method, websocket=websocket)
         else:
-            # handlers = route.handlers if route.is_variable else self.handlers
-            route.handlers[method] = handler
-            # handlers[method] = handler
-            ...
+            route.handlers[method] = Handler(handle)
 
     def add_handler(self, func, method: str):
         handler = Handler(func)
@@ -80,31 +74,26 @@ class Router(Route):
             self.routes = router.routes
             self.variable = router.variable
             self.is_variable = router.is_variable
-        else:
-            routes = self.routes
-            while True:
-                node = nodes.pop(0)
-                if len(nodes) == 0:
-                    routes[node] = router
-                    break
-                elif node.startswith('{'):
-                    if self.variable:
-                        route = self.variable
-                    else:
-                        route = Route()
-                        route.is_variable = True
-                        route.name = node[1:-1]
-                        self.variable = route
-                        routes = route.routes
+            return
+        current = self
+        for i, node in enumerate(nodes):
+            is_last = i == len(nodes) - 1
+            if node.startswith('{'):
+                if is_last:
+                    current.variable = router
                 else:
-                    if node in routes:
-                        if routes[node].routes:
-                            routes = routes[node].routes
-                        else:
-                            routes = routes[node].variable
-                    else:
-                        routes[node] = Router()
-                        routes = routes[node].routes
+                    if not current.variable:
+                        route = Route(name=node[1:-1])
+                        route.is_variable = True
+                        current.variable = route
+                    current = current.variable
+            else:
+                if is_last:
+                    current.routes[node] = router
+                else:
+                    if node not in current.routes:
+                        current.routes[node] = Route(name=node)
+                    current = current.routes[node]
 
     def match(self, url, method):
         nodes = url[1:].split('/')
@@ -114,22 +103,19 @@ class Router(Route):
         variable = self.variable
         args = {}
         route = None
-        while len(nodes) > 0:
-            node = nodes.pop(0)
-            route = routes.get(node, None)
+        for node in nodes:
+            route = routes.get(node)
             if not route:
                 if variable:
                     route = variable
                     args[route.name] = node
                 else:
+                    route = None
                     break
             routes = route.routes
             variable = route.variable
-        if route:
-            if method in route.handlers:
-                pass
-            else:
-                route = None
+        if route and method not in route.handlers:
+            route = None
         return route, args
 
     def get(self, path):
