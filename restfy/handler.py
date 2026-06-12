@@ -28,8 +28,10 @@ class Handler:
     async def execute(self, request: Request):
         args = {}
         for key, kind in self.parameters.items():
-            value = request.vars.pop(key, None) or request.params.pop(key, None)
-            if not value:
+            value = request.vars.pop(key, None)
+            if value is None:
+                value = request.params.pop(key, None)
+            if value is None:
                 continue
             if kind in [int, float, bool]:
                 try:
