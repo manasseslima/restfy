@@ -50,7 +50,10 @@ class Connection:
         del self.app.connections[self.id]
 
     async def execute_handler(self, request: Request):
-        if route := self.router.match(request.url, request.method):
+        route, args = self.router.match(request.url, request.method)
+        if route:
+            request.path_args.update(args)
+            request.vars.update(args)
             response = await self.execute_middlewares(route, request)
             if request.origin:
                 response.headers.update(self.cors.get_response_headers())

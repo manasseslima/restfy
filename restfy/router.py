@@ -4,7 +4,6 @@ from restfy.handler import Handler
 
 class Route:
     def __init__(self, name='', node='', path=None, handle=None, method='', prepare_data=True, websocket=False):
-        self.properties = {}
         self.handlers = {}
         self.routes = {}
         self.variable = None
@@ -52,9 +51,6 @@ class Route:
         handler = self.handlers[request.method]
         if self.prepare_data and request.app.prepare_request_data:
             request.prepare_data()
-        for key, value in self.properties.items():
-            request.path_args[key] = value
-            request.vars[key] = value
         return await handler.execute(request)
 
 
@@ -113,7 +109,7 @@ class Router(Route):
     def match(self, url, method):
         nodes = url[1:].split('/')
         if len(nodes) == 1 and nodes[0] == '':
-            return self
+            return self, {}
         routes = self.routes
         variable = self.variable
         args = {}
@@ -131,10 +127,10 @@ class Router(Route):
             variable = route.variable
         if route:
             if method in route.handlers:
-                route.properties = args
+                pass
             else:
                 route = None
-        return route
+        return route, args
 
     def get(self, path):
         def wrapper(func):
