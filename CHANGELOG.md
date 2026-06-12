@@ -23,6 +23,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - HTTPS integration tests (`test_https_get`, `test_https_post`) with a real TLS server, self-signed certificate and SSL client.
+- WebSocket support: `WebSocket` class with `send_text`, `send_bytes`, `receive_text`, `receive_bytes`, `close`, fragmented-frame reassembly, auto-pong on ping, and RFC 6455 masking for client frames.
+- WebSocket route handlers can now declare a `WebSocket` parameter; `Handler.execute_websocket()` injects it automatically alongside path/query args and the `Request`.
+- `WebSocket` exported from the top-level `restfy` package.
+- WebSocket integration tests (`test_websocket_text_echo`, `test_websocket_binary_echo`, `test_websocket_close_from_client`) using in-memory stream pairs.
+
+### Fixed
+- `websocket.prepare_websocket()`: `del response.headers[...]` raised `KeyError` when the header was absent; replaced with `.pop(..., None)`. Also removes `Content-Type` and `Content-Length` from 101 upgrade responses.
+- `Connection.execute_handler()` now returns `(response, route)` so `H1Connection` can start the WebSocket message loop after sending the 101 response without re-matching the route.
 
 ### Performance
 - `H1Connection`: body reading replaced with `readexactly(length)`, eliminating the concatenation loop with 1000-byte chunks.

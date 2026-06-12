@@ -10,7 +10,7 @@ from urllib.parse import parse_qsl
 from restfy.request import Request, AccessControl
 from restfy.response import Response
 from restfy.middleware import Middleware
-from restfy.websocket import prepare_websocket
+from restfy.websocket import WebSocket, prepare_websocket
 from restfy.router import Router, Route
 from restfy.connection import frame
 
@@ -55,14 +55,17 @@ class Connection:
         if route:
             request.path_args.update(args)
             request.vars.update(args)
-            response = await self.execute_middlewares(route, request)
-            if request.origin:
-                response.headers.update(self.cors.get_response_headers())
             if route.is_websocket:
+                response = Response()
                 prepare_websocket(request=request, response=response)
+            else:
+                response = await self.execute_middlewares(route, request)
+                if request.origin:
+                    response.headers.update(self.cors.get_response_headers())
         else:
             response = Response(status=404)
-        return response
+            route = None
+        return response, route
 
     async def execute_middlewares(self, route: Route, request: Request) -> Response:
         if self.middlewares:
@@ -227,7 +230,7 @@ class H2Connection(Connection):
         return True
 
     async def process_response(self, request: Request, stream: int):
-        response: Response = await self.execute_handler(request=request)
+        response, _ = await self.execute_handler(request=request)
         blk = self.generate_header_frame_block(response=response, stream=stream)
         self.writer.write(blk)
         await self.writer.drain()
@@ -273,6 +276,7 @@ class H1Connection(Connection):
     async def handler(self, data: bytes):
         (method, url, version) = data.decode().replace('\n', '').split(' ')
         request = self.generate_request(url=url, method=method, version=version)
+        route = None
         try:
             while True:
                 line = await self.reader.readline()
@@ -288,12 +292,20 @@ class H1Connection(Connection):
                 response = Response(status=204)
                 response.headers.update(self.cors.get_response_headers())
             else:
-                response = await self.execute_handler(request=request)
+                response, route = await self.execute_handler(request=request)
         except Exception as e:
             response = Response({'message': 'Internal Server Error', 'detail': str(e)}, status=500)
         block = response.render()
         self.writer.write(block)
         await self.writer.drain()
-        await self.close()
+        if response.status == 101 and route:
+            ws_handler = route.handlers.get('GET')
+            if ws_handler and ws_handler.websocket_parameter:
+                ws = WebSocket(self.reader, self.writer)
+                try:
+                    await ws_handler.execute_websocket(ws, request)
+                except (ConnectionError, asyncio.IncompleteReadError):
+                    pass
         diff = time.time_ns() - self.ini
         self.print_request(self.start, method, url, response, diff)
+        await self.close()
