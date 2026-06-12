@@ -34,7 +34,7 @@ class Client:
             if content_type == 'application/json' and not isinstance(data, bytes):
                 req.body = json.dumps(data).encode()
                 req.add_header('Content-Length', len(req.body))
-        res = await con.execute_handler(req)
+        res, _ = await con.execute_handler(req)
         res.render()
         return res
 
