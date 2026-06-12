@@ -94,8 +94,8 @@ class Response:
             self._identify_binary_data()
         elif isinstance(self.data, str):
             self.headers['Content-Type'] = 'text/plain'
-        self.body = self.data.encode()
-        self.headers['Content-Length'] = len(self.data)
+        self.body = self.data if isinstance(self.data, bytes) else self.data.encode()
+        self.headers['Content-Length'] = len(self.body)
         self.headers.update(headers)
 
     def _identify_binary_data(self):
