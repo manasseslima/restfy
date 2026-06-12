@@ -1,3 +1,4 @@
+import inspect
 import bike
 from .request import Request
 from .response import Response
@@ -15,13 +16,15 @@ class Handler:
         self.return_type: type | None = None
         params = func.__annotations__
         for name, param in params.items():
-            if issubclass(param, Request):
+            if name == 'return':
+                self.return_type = param
+            elif not inspect.isclass(param):
+                self.parameters[name] = param
+            elif issubclass(param, Request):
                 self.request_parameter = name
             elif issubclass(param, bike.Model):
                 self.payload_parameter = name
                 self.payload_model = param
-            elif name == 'return':
-                self.return_type = param
             else:
                 self.parameters[name] = param
 
