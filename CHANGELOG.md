@@ -27,10 +27,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - WebSocket route handlers can now declare a `WebSocket` parameter; `Handler.execute_websocket()` injects it automatically alongside path/query args and the `Request`.
 - `WebSocket` exported from the top-level `restfy` package.
 - WebSocket integration tests (`test_websocket_text_echo`, `test_websocket_binary_echo`, `test_websocket_close_from_client`) using in-memory stream pairs.
+- Configurable CORS via `CORSConfig` and `Application.configure_cors()`: `allow_origins` (list or `'*'`), `allow_methods`, `allow_headers`, `allow_credentials`, `max_age`, `expose_headers`. `CORSConfig` can also be passed directly to `Application(cors=...)`. `Vary: Origin` is added automatically when the response origin is not `*`.
+- `CORSConfig` exported from the top-level `restfy` package.
+- CORS tests covering wildcard, allowed/denied specific origins, preflight, credentials, and `CORSConfig` constructor injection.
 
 ### Fixed
 - `websocket.prepare_websocket()`: `del response.headers[...]` raised `KeyError` when the header was absent; replaced with `.pop(..., None)`. Also removes `Content-Type` and `Content-Length` from 101 upgrade responses.
 - `Connection.execute_handler()` now returns `(response, route)` so `H1Connection` can start the WebSocket message loop after sending the 101 response without re-matching the route.
+- CORS: `AccessControl` used class-level variables, making all instances share the same configuration. Replaced with `CORSConfig` (instance variables).
+- CORS: `allow_credentials=True` with wildcard origin is now forbidden per RFC — the response correctly echoes back the specific request origin instead of `*`.
+- CORS: `expose_headers` was passed as a list object instead of a comma-separated string.
+- CORS: preflight handling moved into `Connection.execute_handler()` so it works correctly via the testing `Client` (previously it was only in `H1Connection.handler`).
 
 ### Performance
 - `H1Connection`: body reading replaced with `readexactly(length)`, eliminating the concatenation loop with 1000-byte chunks.

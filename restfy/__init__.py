@@ -6,6 +6,7 @@ from .response import Response
 from .middleware import Middleware
 from .testing import Client
 from .websocket import WebSocket
+from .cors import CORSConfig
 
 
-__all__ = ('Application', 'Server', 'Router', 'Middleware', 'Response', 'Request', 'Client', 'WebSocket')
+__all__ = ('Application', 'Server', 'Router', 'Middleware', 'Response', 'Request', 'Client', 'WebSocket', 'CORSConfig')
