@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- HTTP/2: duplicate `case b'\x02'` in `SettingFrame.set_payload()` — `SETTINGS_MAX_HEADER_LIST_SIZE` was never parsed (correct key: `b'\x06'`).
+- HTTP/2: `TypeError` in `HeaderFrame.encode_payload()` when concatenating `int` to `bytes` (`md += i`).
+- HTTP/2: `TypeError` in `HeaderFrame.encode_payload()` for short string values (≤ 5 chars) — `ec = val` kept a str instead of bytes.
+- HTTP/2: dynamic table stored a tuple `(key, val)` but was consumed as a string, causing `AttributeError` on `.split()`.
+- HTTP/2: missing Huffman flag `0x80` in the header name length byte in `encode_payload()`.
+- HTTP/2: wrong slice in `validate_bulk()` — `bulk[9:fme.length - 9]` corrected to `bulk[9:9 + fme.length]`.
+- HTTP/2: `H2Connection.handler()` only responded to `GET` requests; now uses `fme.end_stream` to cover `DELETE`, `HEAD` and other bodyless methods.
+- Router: race condition under concurrent requests with path variables — `route.properties` was mutable shared state on the `Route` object. `match()` now returns `(route, args)` and args are written onto the per-request `request` object.
+- Handler: falsy parameters (`0`, `False`, `""`) were silently dropped by `if not value`. Fixed to `if value is None`.
+- Handler: `issubclass()` raised `TypeError` for modern type hints (`list[str]`, `dict[str, int]`, `str | None`). Added `inspect.isclass()` guard.
+- Response: `bytes.encode()` does not exist — crash when returning binary data. `self.body` now keeps `bytes` as-is.
+- Router: `register_router()` always referenced `self.variable` (root) when traversing intermediate variable nodes, ignoring the current traversal level.
+
+### Added
+- HTTPS integration tests (`test_https_get`, `test_https_post`) with a real TLS server, self-signed certificate and SSL client.
+
+### Performance
+- `H1Connection`: body reading replaced with `readexactly(length)`, eliminating the concatenation loop with 1000-byte chunks.
+- `Request.args()`: removed redundant query string re-parsing; now returns `query_args` already populated by `generate_request()`.
+- `Request.decode_data()`: result cached in `self.data`; subsequent calls to `dict()` no longer re-execute `json.loads()`.
+- Router `add_node()`: `Handler` is now created only at the leaf node, eliminating discarded instances on intermediate nodes.
+- Router `match()`: `while` + `list.pop(0)` (O(n) per step) replaced by `for node in nodes` (O(1)).
+
 
 ## [0.4.1] - 2023-06-09
 ### Added
