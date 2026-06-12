@@ -7,7 +7,8 @@ import uuid
 from collections import deque
 from urllib.parse import parse_qsl
 
-from restfy.request import Request, AccessControl
+from restfy.cors import CORSConfig
+from restfy.request import Request
 from restfy.response import Response
 from restfy.middleware import Middleware
 from restfy.websocket import WebSocket, prepare_websocket
@@ -35,7 +36,7 @@ class Connection:
         self.ini = time.time_ns()
         self.reader = reader
         self.writer = writer
-        self.cors: AccessControl = AccessControl()
+        self.cors: CORSConfig = CORSConfig()
         self.prepare_request_data: bool = True
         self.status: ConnectionStatus = ConnectionStatus.OPENED
         self.middlewares: list[Middleware] = []
@@ -51,6 +52,10 @@ class Connection:
         del self.app.connections[self.id]
 
     async def execute_handler(self, request: Request):
+        if request.preflight:
+            response = Response(status=204)
+            response.headers.update(self.cors.get_response_headers(request.origin))
+            return response, None
         route, args = self.router.match(request.url, request.method)
         if route:
             request.path_args.update(args)
@@ -60,8 +65,7 @@ class Connection:
                 prepare_websocket(request=request, response=response)
             else:
                 response = await self.execute_middlewares(route, request)
-                if request.origin:
-                    response.headers.update(self.cors.get_response_headers())
+                response.headers.update(self.cors.get_response_headers(request.origin))
         else:
             response = Response(status=404)
             route = None
@@ -288,11 +292,7 @@ class H1Connection(Connection):
                 request.add_header(key=splt[0].strip(), value=splt[1].strip())
             if request.length:
                 request.body = await self.reader.readexactly(request.length)
-            if request.preflight:
-                response = Response(status=204)
-                response.headers.update(self.cors.get_response_headers())
-            else:
-                response, route = await self.execute_handler(request=request)
+            response, route = await self.execute_handler(request=request)
         except Exception as e:
             response = Response({'message': 'Internal Server Error', 'detail': str(e)}, status=500)
         block = response.render()

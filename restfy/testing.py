@@ -19,6 +19,7 @@ class Client:
         con = Connection(reader=None, writer=None)
         con.router = self.app.router
         con.middlewares = self.app.middlewares
+        con.cors = self.app.cors
         req = con.generate_request(url=url, method=method, version='http/1.1')
         req.app = self.app
         for k, v in headers.items():

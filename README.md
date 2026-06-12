@@ -170,6 +170,38 @@ When returning binary data (e.g. a PDF), always use a `Response` instance with
 the appropriate `content_type`.
 
 
+## CORS
+
+Cross-Origin Resource Sharing is configured via `Application.configure_cors()` or by passing a `CORSConfig` instance to the constructor.
+
+```python
+from restfy import Application, CORSConfig
+
+app = Application()
+
+# Keyword-argument style
+app.configure_cors(
+    allow_origins=['https://example.com', 'https://app.example.com'],
+    allow_methods=['GET', 'POST', 'PUT', 'DELETE'],
+    allow_headers=['Content-Type', 'Authorization'],
+    allow_credentials=False,
+    max_age=3600,
+    expose_headers=['X-Custom-Header'],
+)
+
+# Constructor style
+app2 = Application(cors=CORSConfig(allow_origins='*'))
+```
+
+`allow_origins` can be a single string (`'*'` for wildcard) or a list of allowed origins.
+When a specific origin list is configured, only matching origins receive CORS headers and
+`Vary: Origin` is added automatically. When `allow_credentials=True`, the wildcard `'*'`
+is never sent — the echoed request origin is used instead, as required by the CORS spec.
+
+Preflight (`OPTIONS`) requests are handled automatically and return `204 No Content` with
+the appropriate CORS headers.
+
+
 ## Middlewares
 
 Middlewares intercept requests and responses. Create a class that extends
