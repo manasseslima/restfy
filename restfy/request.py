@@ -35,6 +35,7 @@ class Request:
         self.params: dict = {}
         self.path_args: dict = {}
         self.vars: dict = {}
+        self.cookies: dict = {}
 
     def add_header(self, key, value):
         self.headers[key] = value
@@ -58,6 +59,12 @@ class Request:
                 self.request_method = value
             case 'access-control-request-headers':
                 self.request_headers = value
+            case 'cookie':
+                for pair in value.split(';'):
+                    pair = pair.strip()
+                    if '=' in pair:
+                        k, _, v = pair.partition('=')
+                        self.cookies[k.strip()] = v.strip()
 
     def dict(self):
         return self.decode_data()
