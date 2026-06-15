@@ -30,6 +30,7 @@ class Application:
         self.connections: dict[uuid.UUID, Connection] = {}
         self.error_handlers: dict[int, callable] = {}
         self.exception_handlers: dict[type, callable] = {}
+        self.static_mounts: dict[str, str] = {}
 
     def configure_cors(
             self,
@@ -69,6 +70,10 @@ class Application:
             if cls in self.exception_handlers:
                 return self.exception_handlers[cls]
         return None
+
+    def mount_static(self, path: str, *, directory: str):
+        """Serve static files from *directory* under the URL *path* prefix."""
+        self.static_mounts[path.rstrip('/')] = directory
 
     def add_route(self, path, handle, method='GET'):
         self.router.add_route(path, handle, method)
