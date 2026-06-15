@@ -1,5 +1,6 @@
 import inspect
 import bike
+from .background import BackgroundTask, BackgroundTasks
 from .request import Request
 from .response import Response
 from .websocket import WebSocket
@@ -24,6 +25,7 @@ class Handler:
         self.request_parameter: str = ''
         self.payload_parameter: str = ''
         self.websocket_parameter: str = ''
+        self.background_tasks_parameter: str = ''
         self.payload_model = None
         self.return_type: type | None = None
         params = func.__annotations__
@@ -36,6 +38,8 @@ class Handler:
                 self.websocket_parameter = name
             elif issubclass(param, Request):
                 self.request_parameter = name
+            elif issubclass(param, BackgroundTasks):
+                self.background_tasks_parameter = name
             elif issubclass(param, bike.Model):
                 self.payload_parameter = name
                 self.payload_model = param
@@ -65,9 +69,15 @@ class Handler:
         if self.payload_parameter:
             instance = self.payload_model(**request.data)
             args[self.payload_parameter] = instance
+
+        bg_tasks = None
+        if self.background_tasks_parameter:
+            bg_tasks = BackgroundTasks()
+            args[self.background_tasks_parameter] = bg_tasks
+
         try:
             ret = await self.func(**args)
-            return _wrap(ret)
+            response = _wrap(ret)
         except Exception as exc:
             exc_handler = request.app.get_exception_handler(type(exc)) if request.app else None
             if exc_handler:
@@ -78,6 +88,20 @@ class Handler:
                 except Exception:
                     pass
             return Response({'message': 'Error on executing request', 'detail': str(exc)}, status=400)
+
+        if bg_tasks:
+            if response.background is None:
+                response.background = bg_tasks
+            else:
+                merged = BackgroundTasks()
+                if isinstance(response.background, BackgroundTask):
+                    merged._tasks.append(response.background)
+                else:
+                    merged._tasks.extend(response.background._tasks)
+                merged._tasks.extend(bg_tasks._tasks)
+                response.background = merged
+
+        return response
 
     async def execute_websocket(self, websocket: WebSocket, request: Request):
         args = self._build_args(request)

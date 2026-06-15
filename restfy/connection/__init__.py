@@ -51,6 +51,10 @@ class Connection:
         await self.writer.wait_closed()
         del self.app.connections[self.id]
 
+    async def _run_background(self, response: Response):
+        if response.background:
+            await response.background.run()
+
     async def _apply_status_handler(self, response: Response, request: Request) -> Response:
         if not self.app:
             return response
@@ -257,6 +261,7 @@ class H2Connection(Connection):
         blk = self.generate_data_frame_block(response=response, stream=stream)
         self.writer.write(blk)
         await self.writer.drain()
+        await self._run_background(response)
         diff = time.time_ns() - self.ini
         self.print_request(self.start, request.method, request.url, response, diff)
         ...
@@ -355,6 +360,7 @@ class H1Connection(Connection):
             block = response.render()
             self.writer.write(block)
             await self.writer.drain()
+            await self._run_background(response)
 
             diff = time.time_ns() - self.ini
             self.print_request(self.start, method, url, response, diff)
