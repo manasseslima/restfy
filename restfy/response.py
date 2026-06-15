@@ -67,20 +67,15 @@ class Response:
             self.background = _bg
         else:
             self.background = background
-        self._prepare_headers(headers)
         self.content = b''
         self.text = ''
         self.body = b''
+        self._prepare_headers(headers)
 
     def render(self) -> bytes:
         title = status_title.get(self.status, 'STATUS WITHOUT TITLE')
         headers = '\r\n'.join([f"{k}:{v}" for k, v in self.headers.items()])
-        body = self.data
-        content = f'{self.version} {self.status} {title}\r\n{headers}\r\n\r\n'
-        if body:
-            content = f'{content}{body}'
-            self.content = body.encode()
-        return content.encode()
+        return f'{self.version} {self.status} {title}\r\n{headers}\r\n\r\n'.encode() + self.body
 
     def parser(self, model: Any = None):
         res = json.loads(self.data)
@@ -93,19 +88,24 @@ class Response:
             headers = {}
         if self.data is None:
             self.data = ''
-        if self.content_type:
-            self.headers['Content-Type'] = self.content_type
         if isinstance(self.data, dict) or isinstance(self.data, list):
             self.data = json.dumps(self.data, cls=JSONEncoder)
-            self.headers['Content-Type'] = 'application/json'
+            if not self.content_type:
+                self.headers['Content-Type'] = 'application/json'
         elif isinstance(self.data, bytes):
-            self._identify_binary_data()
+            if not self.content_type:
+                self._identify_binary_data()
         elif isinstance(self.data, str):
-            self.headers['Content-Type'] = 'text/plain'
+            if not self.content_type:
+                self.headers['Content-Type'] = 'text/plain'
+        if self.content_type:
+            self.headers['Content-Type'] = self.content_type
         self.body = self.data if isinstance(self.data, bytes) else self.data.encode()
         self.headers['Content-Length'] = len(self.body)
         self.headers.update(headers)
 
     def _identify_binary_data(self):
-        if self.data[1:4] == 'PDF':
+        if self.data[:4] == b'%PDF':
             self.headers['Content-Type'] = 'application/pdf'
+        else:
+            self.headers['Content-Type'] = 'application/octet-stream'

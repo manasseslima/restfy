@@ -75,6 +75,15 @@ class Connection:
             response = Response(status=204)
             response.headers.update(self.cors.get_response_headers(request.origin))
             return response, None
+        if self.app and self.app.static_mounts:
+            for prefix, directory in self.app.static_mounts.items():
+                if request.url == prefix or request.url.startswith(prefix + '/'):
+                    from restfy.static import handle_static
+                    rel = request.url[len(prefix):]
+                    response = await handle_static(rel, directory, request)
+                    response.headers.update(self.cors.get_response_headers(request.origin))
+                    response = await self._apply_status_handler(response, request)
+                    return response, None
         route, args = self.router.match(request.url, request.method)
         if route:
             request.path_args.update(args)
