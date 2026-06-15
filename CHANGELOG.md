@@ -46,6 +46,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - HTTP/1.0 Keep-Alive opt-in: connections with `Connection: keep-alive` in the request are kept open; without it, the HTTP/1.0 default (close) applies.
 - Keep-Alive tests: two sequential requests on one connection, `Connection: close` early termination, HTTP/1.0 default close, HTTP/1.0 keep-alive opt-in, POST + GET pipeline.
 
+### Added
+- Static file serving: `app.mount_static(path, *, directory)` serves files from a directory under a URL prefix. Features: automatic `Content-Type` detection via `mimetypes`, `ETag` and `Last-Modified` headers, conditional `304 Not Modified` responses (`If-None-Match`, `If-Modified-Since`), `Cache-Control: public, max-age=3600`, directory index via `index.html`, path traversal protection (403 on escape attempt), and 403 for directories without an index. File I/O is offloaded to a thread pool via `asyncio.to_thread`.
+- Static file serving tests (16 tests) covering all file types, subdirectories, 404/403 responses, ETag round-trip, directory index, path traversal, and API route isolation.
+
+### Fixed
+- `Response.__init__`: `self.body`, `self.content`, and `self.text` were initialised after `_prepare_headers()`, silently overwriting the body computed for binary and text responses. Moved to before the `_prepare_headers()` call.
+
 ### Performance
 - `H1Connection`: body reading replaced with `readexactly(length)`, eliminating the concatenation loop with 1000-byte chunks.
 - `Request.args()`: removed redundant query string re-parsing; now returns `query_args` already populated by `generate_request()`.
