@@ -2,6 +2,7 @@ import json
 import datetime
 import decimal
 from typing import Any
+from restfy.background import BackgroundTask, BackgroundTasks
 
 status_title = {
     101: 'Switching Protocols',
@@ -52,13 +53,20 @@ class Response:
             status: int = 200,
             *,
             content_type: str = '',
-            headers: dict = None
+            headers: dict = None,
+            background=None,
     ):
         self.version = 'HTTP/1.1'
         self.status = status
         self.data = data if status != 204 else None
         self.headers = {}
         self.content_type = content_type
+        if isinstance(background, BackgroundTask):
+            _bg = BackgroundTasks()
+            _bg._tasks.append(background)
+            self.background = _bg
+        else:
+            self.background = background
         self._prepare_headers(headers)
         self.content = b''
         self.text = ''

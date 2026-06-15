@@ -38,6 +38,8 @@ class Client:
                 req.add_header('Content-Length', len(req.body))
         res, _ = await con.execute_handler(req)
         res.render()
+        if res.background:
+            await res.background.run()
         return res
 
     async def get(
