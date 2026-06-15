@@ -276,36 +276,93 @@ class H2Connection(Connection):
         return blk
 
 
+_KEEP_ALIVE_TIMEOUT = 30
+_KEEP_ALIVE_MAX = 100
+
+
 class H1Connection(Connection):
     async def handler(self, data: bytes):
-        (method, url, version) = data.decode().replace('\n', '').split(' ')
-        request = self.generate_request(url=url, method=method, version=version)
-        route = None
-        try:
-            while True:
-                line = await self.reader.readline()
-                header = line.decode()
-                if header == '\r\n':
-                    break
-                header = header.replace('\r\n', '')
-                splt = header.split(':', maxsplit=1)
-                request.add_header(key=splt[0].strip(), value=splt[1].strip())
-            if request.length:
-                request.body = await self.reader.readexactly(request.length)
-            response, route = await self.execute_handler(request=request)
-        except Exception as e:
-            response = Response({'message': 'Internal Server Error', 'detail': str(e)}, status=500)
-        block = response.render()
-        self.writer.write(block)
-        await self.writer.drain()
-        if response.status == 101 and route:
-            ws_handler = route.handlers.get('GET')
-            if ws_handler and ws_handler.websocket_parameter:
-                ws = WebSocket(self.reader, self.writer)
-                try:
-                    await ws_handler.execute_websocket(ws, request)
-                except (ConnectionError, asyncio.IncompleteReadError):
-                    pass
-        diff = time.time_ns() - self.ini
-        self.print_request(self.start, method, url, response, diff)
+        requests_handled = 0
+
+        while data:
+            requests_handled += 1
+            self.ini = time.time_ns()
+            self.start = datetime.datetime.now()
+
+            try:
+                (method, url, version) = data.decode().replace('\n', '').split(' ')
+            except ValueError:
+                break
+
+            is_http11 = '1.1' in version
+            request = self.generate_request(url=url, method=method, version=version)
+            route = None
+            persist = False
+
+            try:
+                while True:
+                    line = await self.reader.readline()
+                    header = line.decode()
+                    if header == '\r\n':
+                        break
+                    header = header.replace('\r\n', '')
+                    if ':' not in header:
+                        continue
+                    splt = header.split(':', maxsplit=1)
+                    request.add_header(key=splt[0].strip(), value=splt[1].strip())
+
+                if is_http11:
+                    persist = request.connection != 'close'
+                else:
+                    persist = request.connection == 'keep-alive'
+
+                if request.length:
+                    request.body = await self.reader.readexactly(request.length)
+
+                response, route = await self.execute_handler(request=request)
+            except Exception as e:
+                response = Response({'message': 'Internal Server Error', 'detail': str(e)}, status=500)
+                persist = False
+
+            if response.status == 101:
+                persist = False
+            if requests_handled >= _KEEP_ALIVE_MAX:
+                persist = False
+
+            if persist:
+                response.headers['Connection'] = 'keep-alive'
+                response.headers['Keep-Alive'] = f'timeout={_KEEP_ALIVE_TIMEOUT}, max={_KEEP_ALIVE_MAX - requests_handled}'
+            else:
+                response.headers['Connection'] = 'close'
+
+            block = response.render()
+            self.writer.write(block)
+            await self.writer.drain()
+
+            diff = time.time_ns() - self.ini
+            self.print_request(self.start, method, url, response, diff)
+
+            if response.status == 101 and route:
+                ws_handler = route.handlers.get('GET')
+                if ws_handler and ws_handler.websocket_parameter:
+                    ws = WebSocket(self.reader, self.writer)
+                    try:
+                        await ws_handler.execute_websocket(ws, request)
+                    except (ConnectionError, asyncio.IncompleteReadError):
+                        pass
+                break
+
+            if not persist:
+                break
+
+            try:
+                data = await asyncio.wait_for(
+                    self.reader.readline(),
+                    timeout=_KEEP_ALIVE_TIMEOUT,
+                )
+            except asyncio.TimeoutError:
+                break
+            except Exception:
+                break
+
         await self.close()
