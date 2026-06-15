@@ -51,6 +51,21 @@ class Connection:
         await self.writer.wait_closed()
         del self.app.connections[self.id]
 
+    async def _apply_status_handler(self, response: Response, request: Request) -> Response:
+        if not self.app:
+            return response
+        if getattr(response, '_exception_handled', False):
+            return response
+        handler_func = self.app.error_handlers.get(response.status)
+        if not handler_func:
+            return response
+        try:
+            from restfy.handler import _wrap
+            ret = await handler_func(request)
+            return _wrap(ret)
+        except Exception:
+            return response
+
     async def execute_handler(self, request: Request):
         if request.preflight:
             response = Response(status=204)
@@ -69,6 +84,7 @@ class Connection:
         else:
             response = Response(status=404)
             route = None
+        response = await self._apply_status_handler(response, request)
         return response, route
 
     async def execute_middlewares(self, route: Route, request: Request) -> Response:
@@ -322,6 +338,7 @@ class H1Connection(Connection):
                 response, route = await self.execute_handler(request=request)
             except Exception as e:
                 response = Response({'message': 'Internal Server Error', 'detail': str(e)}, status=500)
+                response = await self._apply_status_handler(response, request)
                 persist = False
 
             if response.status == 101:

@@ -39,7 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CORS: `expose_headers` was passed as a list object instead of a comma-separated string.
 - CORS: preflight handling moved into `Connection.execute_handler()` so it works correctly via the testing `Client` (previously it was only in `H1Connection.handler`).
 
-### Added (continued)
+### Added
+- Global error handlers: `app.on_error(status)` registers a handler for a specific HTTP status code; `app.on_exception(ExcType)` registers a handler for an exception type (MRO-aware — a handler for a base class catches subclass exceptions). Exception handlers take precedence and prevent the matching status handler from also running. Both can return `Response`, `dict/list/str`, or `(data, status)` tuple.
 - HTTP/1.1 Keep-Alive: `H1Connection` now loops over multiple requests on the same TCP connection. Default timeout is 30 s and max 100 requests per connection. Responses include `Connection: keep-alive` + `Keep-Alive: timeout=…, max=…` headers, or `Connection: close` when terminating.
 - HTTP/1.0 Keep-Alive opt-in: connections with `Connection: keep-alive` in the request are kept open; without it, the HTTP/1.0 default (close) applies.
 - Keep-Alive tests: two sequential requests on one connection, `Connection: close` early termination, HTTP/1.0 default close, HTTP/1.0 keep-alive opt-in, POST + GET pipeline.

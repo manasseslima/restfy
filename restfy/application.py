@@ -28,6 +28,8 @@ class Application:
         self.middlewares: List[Middleware] = []
         self.prepare_request_data = prepare_request_data
         self.connections: dict[uuid.UUID, Connection] = {}
+        self.error_handlers: dict[int, callable] = {}
+        self.exception_handlers: dict[type, callable] = {}
 
     def configure_cors(
             self,
@@ -47,6 +49,26 @@ class Application:
             max_age=max_age,
             expose_headers=expose_headers,
         )
+
+    def on_error(self, status: int):
+        """Register a handler for a specific HTTP status code."""
+        def decorator(func):
+            self.error_handlers[status] = func
+            return func
+        return decorator
+
+    def on_exception(self, exc_type: type):
+        """Register a handler for a specific exception type (MRO-aware)."""
+        def decorator(func):
+            self.exception_handlers[exc_type] = func
+            return func
+        return decorator
+
+    def get_exception_handler(self, exc_type: type):
+        for cls in exc_type.__mro__:
+            if cls in self.exception_handlers:
+                return self.exception_handlers[cls]
+        return None
 
     def add_route(self, path, handle, method='GET'):
         self.router.add_route(path, handle, method)
