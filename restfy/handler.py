@@ -5,6 +5,16 @@ from .response import Response
 from .websocket import WebSocket
 
 
+def _wrap(ret):
+    if isinstance(ret, Response):
+        return ret
+    if isinstance(ret, tuple):
+        return Response(ret[0], ret[1])
+    if isinstance(ret, (dict, list, str, int, float, bool)):
+        return Response(ret)
+    return Response()
+
+
 class Handler:
     def __init__(self, func: callable):
         self.func: callable = func
@@ -32,7 +42,7 @@ class Handler:
             else:
                 self.parameters[name] = param
 
-    async def execute(self, request: Request):
+    def _build_args(self, request: Request) -> dict:
         args = {}
         for key, kind in self.parameters.items():
             value = request.vars.pop(key, None)
@@ -46,6 +56,10 @@ class Handler:
                 except Exception as e:
                     raise Exception(f'Error try cast value "{value}" {key} {kind}: {e}')
             args[key] = value
+        return args
+
+    async def execute(self, request: Request):
+        args = self._build_args(request)
         if self.request_parameter:
             args[self.request_parameter] = request
         if self.payload_parameter:
@@ -53,32 +67,20 @@ class Handler:
             args[self.payload_parameter] = instance
         try:
             ret = await self.func(**args)
-            if isinstance(ret, tuple):
-                ret = Response(ret[0], ret[1])
-            elif isinstance(ret, (dict, list, str, int, float, bool)):
-                ret = Response(ret)
-        except Exception as e:
-            data = {
-                'message': 'Error on executing request',
-                'detail': str(e)
-            }
-            ret = Response(data, status=400)
-        return ret
+            return _wrap(ret)
+        except Exception as exc:
+            exc_handler = request.app.get_exception_handler(type(exc)) if request.app else None
+            if exc_handler:
+                try:
+                    response = _wrap(await exc_handler(request, exc))
+                    response._exception_handled = True
+                    return response
+                except Exception:
+                    pass
+            return Response({'message': 'Error on executing request', 'detail': str(exc)}, status=400)
 
     async def execute_websocket(self, websocket: WebSocket, request: Request):
-        args = {}
-        for key, kind in self.parameters.items():
-            value = request.vars.pop(key, None)
-            if value is None:
-                value = request.params.pop(key, None)
-            if value is None:
-                continue
-            if kind in [int, float, bool]:
-                try:
-                    value = kind(value)
-                except Exception as e:
-                    raise Exception(f'Error try cast value "{value}" {key} {kind}: {e}')
-            args[key] = value
+        args = self._build_args(request)
         if self.request_parameter:
             args[self.request_parameter] = request
         if self.websocket_parameter:
