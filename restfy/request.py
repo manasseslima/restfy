@@ -24,6 +24,7 @@ class Request:
         self.headers = {}
         self.files = {}
         self.origin = ''
+        self.connection = ''
         self.request_method = ''
         self.request_headers = ''
         self.preflight = False
@@ -51,6 +52,8 @@ class Request:
             case 'origin':
                 self.origin = value
                 self.preflight = True if self.method == 'OPTIONS' else False
+            case 'connection':
+                self.connection = value.lower()
             case 'access-control-request-method':
                 self.request_method = value
             case 'access-control-request-headers':
