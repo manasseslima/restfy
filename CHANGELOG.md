@@ -8,6 +8,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+## [0.5.0] - 2026-06-16
+
+### Fixed
+- HTTP/2: duplicate `case b'\x02'` in `SettingFrame.set_payload()` — `SETTINGS_MAX_HEADER_LIST_SIZE` was never parsed (correct key: `b'\x06'`).
+- HTTP/2: `TypeError` in `HeaderFrame.encode_payload()` when concatenating `int` to `bytes` (`md += i`).
+- HTTP/2: `TypeError` in `HeaderFrame.encode_payload()` for short string values (≤ 5 chars) — `ec = val` kept a str instead of bytes.
+- HTTP/2: dynamic table stored a tuple `(key, val)` but was consumed as a string, causing `AttributeError` on `.split()`.
+- HTTP/2: missing Huffman flag `0x80` in the header name length byte in `encode_payload()`.
+- HTTP/2: wrong slice in `validate_bulk()` — `bulk[9:fme.length - 9]` corrected to `bulk[9:9 + fme.length]`.
+- HTTP/2: `H2Connection.handler()` only responded to `GET` requests; now uses `fme.end_stream` to cover `DELETE`, `HEAD` and other bodyless methods.
+- Router: race condition under concurrent requests with path variables — `route.properties` was mutable shared state on the `Route` object. `match()` now returns `(route, args)` and args are written onto the per-request `request` object.
+- Handler: falsy parameters (`0`, `False`, `""`) were silently dropped by `if not value`. Fixed to `if value is None`.
+- Handler: `issubclass()` raised `TypeError` for modern type hints (`list[str]`, `dict[str, int]`, `str | None`). Added `inspect.isclass()` guard.
+- Response: `bytes.encode()` does not exist — crash when returning binary data. `self.body` now keeps `bytes` as-is.
+- Router: `register_router()` always referenced `self.variable` (root) when traversing intermediate variable nodes, ignoring the current traversal level.
+
+### Added
+- HTTPS integration tests (`test_https_get`, `test_https_post`) with a real TLS server, self-signed certificate and SSL client.
+- WebSocket support: `WebSocket` class with `send_text`, `send_bytes`, `receive_text`, `receive_bytes`, `close`, fragmented-frame reassembly, auto-pong on ping, and RFC 6455 masking for client frames.
+- WebSocket route handlers can now declare a `WebSocket` parameter; `Handler.execute_websocket()` injects it automatically alongside path/query args and the `Request`.
+- `WebSocket` exported from the top-level `restfy` package.
+- WebSocket integration tests (`test_websocket_text_echo`, `test_websocket_binary_echo`, `test_websocket_close_from_client`) using in-memory stream pairs.
+- Configurable CORS via `CORSConfig` and `Application.configure_cors()`: `allow_origins` (list or `'*'`), `allow_methods`, `allow_headers`, `allow_credentials`, `max_age`, `expose_headers`. `CORSConfig` can also be passed directly to `Application(cors=...)`. `Vary: Origin` is added automatically when the response origin is not `*`.
+- `CORSConfig` exported from the top-level `restfy` package.
+- CORS tests covering wildcard, allowed/denied specific origins, preflight, credentials, and `CORSConfig` constructor injection.
+
+### Fixed
+- `websocket.prepare_websocket()`: `del response.headers[...]` raised `KeyError` when the header was absent; replaced with `.pop(..., None)`. Also removes `Content-Type` and `Content-Length` from 101 upgrade responses.
+- `Connection.execute_handler()` now returns `(response, route)` so `H1Connection` can start the WebSocket message loop after sending the 101 response without re-matching the route.
+- CORS: `AccessControl` used class-level variables, making all instances share the same configuration. Replaced with `CORSConfig` (instance variables).
+- CORS: `allow_credentials=True` with wildcard origin is now forbidden per RFC — the response correctly echoes back the specific request origin instead of `*`.
+- CORS: `expose_headers` was passed as a list object instead of a comma-separated string.
+- CORS: preflight handling moved into `Connection.execute_handler()` so it works correctly via the testing `Client` (previously it was only in `H1Connection.handler`).
+
+### Added
+- Background tasks: `BackgroundTask(func, *args, **kwargs)` and `BackgroundTasks` container. Tasks run after the response is written and drained (client never waits). Handlers declare `tasks: BackgroundTasks` to receive an injected container (`tasks.add(func, ...)`), or return `Response(data, background=BackgroundTask(func, ...))` for a single task. Both styles can be combined and their tasks are merged. Sync functions are offloaded to a thread pool via `asyncio.to_thread`. Errors in background tasks are caught, logged, and never crash the connection loop.
+- Global error handlers: `app.on_error(status)` registers a handler for a specific HTTP status code; `app.on_exception(ExcType)` registers a handler for an exception type (MRO-aware — a handler for a base class catches subclass exceptions). Exception handlers take precedence and prevent the matching status handler from also running. Both can return `Response`, `dict/list/str`, or `(data, status)` tuple.
+- HTTP/1.1 Keep-Alive: `H1Connection` now loops over multiple requests on the same TCP connection. Default timeout is 30 s and max 100 requests per connection. Responses include `Connection: keep-alive` + `Keep-Alive: timeout=…, max=…` headers, or `Connection: close` when terminating.
+- HTTP/1.0 Keep-Alive opt-in: connections with `Connection: keep-alive` in the request are kept open; without it, the HTTP/1.0 default (close) applies.
+- Keep-Alive tests: two sequential requests on one connection, `Connection: close` early termination, HTTP/1.0 default close, HTTP/1.0 keep-alive opt-in, POST + GET pipeline.
+
+### Added
+- Static file serving: `app.mount_static(path, *, directory)` serves files from a directory under a URL prefix. Features: automatic `Content-Type` detection via `mimetypes`, `ETag` and `Last-Modified` headers, conditional `304 Not Modified` responses (`If-None-Match`, `If-Modified-Since`), `Cache-Control: public, max-age=3600`, directory index via `index.html`, path traversal protection (403 on escape attempt), and 403 for directories without an index. File I/O is offloaded to a thread pool via `asyncio.to_thread`.
+- Static file serving tests (16 tests) covering all file types, subdirectories, 404/403 responses, ETag round-trip, directory index, path traversal, and API route isolation.
+
+### Fixed
+- `Response.__init__`: `self.body`, `self.content`, and `self.text` were initialised after `_prepare_headers()`, silently overwriting the body computed for binary and text responses. Moved to before the `_prepare_headers()` call.
+
+### Performance
+- `H1Connection`: body reading replaced with `readexactly(length)`, eliminating the concatenation loop with 1000-byte chunks.
+- `Request.args()`: removed redundant query string re-parsing; now returns `query_args` already populated by `generate_request()`.
+- `Request.decode_data()`: result cached in `self.data`; subsequent calls to `dict()` no longer re-execute `json.loads()`.
+- Router `add_node()`: `Handler` is now created only at the leaf node, eliminating discarded instances on intermediate nodes.
+- Router `match()`: `while` + `list.pop(0)` (O(n) per step) replaced by `for node in nodes` (O(1)).
+
+
 ## [0.4.1] - 2023-06-09
 ### Added
 - New Request attributes vars and params to get path variables and query string parameters respectively.

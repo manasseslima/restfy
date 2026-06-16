@@ -5,11 +5,13 @@ import queue
 import time
 import uuid
 from collections import deque
+from urllib.parse import parse_qsl
 
-from restfy.request import Request, AccessControl
+from restfy.cors import CORSConfig
+from restfy.request import Request
 from restfy.response import Response
 from restfy.middleware import Middleware
-from restfy.websocket import prepare_websocket
+from restfy.websocket import WebSocket, prepare_websocket
 from restfy.router import Router, Route
 from restfy.connection import frame
 
@@ -34,7 +36,7 @@ class Connection:
         self.ini = time.time_ns()
         self.reader = reader
         self.writer = writer
-        self.cors: AccessControl = AccessControl()
+        self.cors: CORSConfig = CORSConfig()
         self.prepare_request_data: bool = True
         self.status: ConnectionStatus = ConnectionStatus.OPENED
         self.middlewares: list[Middleware] = []
@@ -49,16 +51,54 @@ class Connection:
         await self.writer.wait_closed()
         del self.app.connections[self.id]
 
+    async def _run_background(self, response: Response):
+        if response.background:
+            await response.background.run()
+
+    async def _apply_status_handler(self, response: Response, request: Request) -> Response:
+        if not self.app:
+            return response
+        if getattr(response, '_exception_handled', False):
+            return response
+        handler_func = self.app.error_handlers.get(response.status)
+        if not handler_func:
+            return response
+        try:
+            from restfy.handler import _wrap
+            ret = await handler_func(request)
+            return _wrap(ret)
+        except Exception:
+            return response
+
     async def execute_handler(self, request: Request):
-        if route := self.router.match(request.url, request.method):
-            response = await self.execute_middlewares(route, request)
-            if request.origin:
-                response.headers.update(self.cors.get_response_headers())
+        if request.preflight:
+            response = Response(status=204)
+            response.headers.update(self.cors.get_response_headers(request.origin))
+            return response, None
+        if self.app and self.app.static_mounts:
+            for prefix, directory in self.app.static_mounts.items():
+                if request.url == prefix or request.url.startswith(prefix + '/'):
+                    from restfy.static import handle_static
+                    rel = request.url[len(prefix):]
+                    response = await handle_static(rel, directory, request)
+                    response.headers.update(self.cors.get_response_headers(request.origin))
+                    response = await self._apply_status_handler(response, request)
+                    return response, None
+        route, args = self.router.match(request.url, request.method)
+        if route:
+            request.path_args.update(args)
+            request.vars.update(args)
             if route.is_websocket:
+                response = Response()
                 prepare_websocket(request=request, response=response)
+            else:
+                response = await self.execute_middlewares(route, request)
+                response.headers.update(self.cors.get_response_headers(request.origin))
         else:
             response = Response(status=404)
-        return response
+            route = None
+        response = await self._apply_status_handler(response, request)
+        return response, route
 
     async def execute_middlewares(self, route: Route, request: Request) -> Response:
         if self.middlewares:
@@ -85,18 +125,9 @@ class Connection:
         request.params = {**args}
         return request
 
-    def extract_arguments(self, query):
-        ret = {}
-        if query:
-            pairs = query.split('&')
-            for pair in pairs:
-                (key, value) = tuple(pair.split('='))
-                ret[key] = self.argument_decode(value)
-        return ret
-
     @staticmethod
-    def argument_decode(value):
-        return value
+    def extract_arguments(query: str) -> dict:
+        return dict(parse_qsl(query, keep_blank_values=True))
 
     @staticmethod
     def print_request(start, method, url, response, diff):
@@ -195,7 +226,7 @@ class H2Connection(Connection):
                     for k, v in headers.items():
                         request.add_header(k, v)
                     streams[fme.stream]['request'] = request
-                    if method == 'GET' and fme.end_headers:
+                    if fme.end_stream:
                         await self.process_response(request, stream=fme.stream)
                 case frame.DataFrame():
                     request = streams[fme.stream]['request']
@@ -227,18 +258,19 @@ class H2Connection(Connection):
     def validate_bulk(self, bulk: bytes) -> bool:
         frame_header = bulk[:9]
         fme = self.get_frame(frame_header, self)
-        chunk = bulk[9:fme.length - 9]
+        chunk = bulk[9:9 + fme.length]
         fme.set_payload(chunk)
         return True
 
     async def process_response(self, request: Request, stream: int):
-        response: Response = await self.execute_handler(request=request)
+        response, _ = await self.execute_handler(request=request)
         blk = self.generate_header_frame_block(response=response, stream=stream)
         self.writer.write(blk)
         await self.writer.drain()
         blk = self.generate_data_frame_block(response=response, stream=stream)
         self.writer.write(blk)
         await self.writer.drain()
+        await self._run_background(response)
         diff = time.time_ns() - self.ini
         self.print_request(self.start, request.method, request.url, response, diff)
         ...
@@ -274,40 +306,95 @@ class H2Connection(Connection):
         return blk
 
 
+_KEEP_ALIVE_TIMEOUT = 30
+_KEEP_ALIVE_MAX = 100
+
+
 class H1Connection(Connection):
     async def handler(self, data: bytes):
-        (method, url, version) = data.decode().replace('\n', '').split(' ')
-        request = self.generate_request(url=url, method=method, version=version)
-        try:
-            while True:
-                line = await self.reader.readline()
-                header = line.decode()
-                if header == '\r\n':
-                    break
-                header = header.replace('\r\n', '')
-                splt = header.split(':', maxsplit=1)
-                request.add_header(key=splt[0].strip(), value=splt[1].strip())
-            if request.length:
-                length = request.length
-                size = length if length <= 1000 else 1000
-                content = b''
+        requests_handled = 0
+
+        while data:
+            requests_handled += 1
+            self.ini = time.time_ns()
+            self.start = datetime.datetime.now()
+
+            try:
+                (method, url, version) = data.decode().replace('\n', '').split(' ')
+            except ValueError:
+                break
+
+            is_http11 = '1.1' in version
+            request = self.generate_request(url=url, method=method, version=version)
+            route = None
+            persist = False
+
+            try:
                 while True:
-                    content += await self.reader.read(size)
-                    length -= size
-                    if length == 0:
+                    line = await self.reader.readline()
+                    header = line.decode()
+                    if header == '\r\n':
                         break
-                    size = length if length <= 1000 else 1000
-                request.body = content
-            if request.preflight:
-                response = Response(status=204)
-                response.headers.update(self.cors.get_response_headers())
+                    header = header.replace('\r\n', '')
+                    if ':' not in header:
+                        continue
+                    splt = header.split(':', maxsplit=1)
+                    request.add_header(key=splt[0].strip(), value=splt[1].strip())
+
+                if is_http11:
+                    persist = request.connection != 'close'
+                else:
+                    persist = request.connection == 'keep-alive'
+
+                if request.length:
+                    request.body = await self.reader.readexactly(request.length)
+
+                response, route = await self.execute_handler(request=request)
+            except Exception as e:
+                response = Response({'message': 'Internal Server Error', 'detail': str(e)}, status=500)
+                response = await self._apply_status_handler(response, request)
+                persist = False
+
+            if response.status == 101:
+                persist = False
+            if requests_handled >= _KEEP_ALIVE_MAX:
+                persist = False
+
+            if persist:
+                response.headers['Connection'] = 'keep-alive'
+                response.headers['Keep-Alive'] = f'timeout={_KEEP_ALIVE_TIMEOUT}, max={_KEEP_ALIVE_MAX - requests_handled}'
             else:
-                response = await self.execute_handler(request=request)
-        except Exception as e:
-            response = Response({'message': 'Internal Server Error', 'detail': str(e)}, status=500)
-        block = response.render()
-        self.writer.write(block)
-        await self.writer.drain()
+                response.headers['Connection'] = 'close'
+
+            block = response.render()
+            self.writer.write(block)
+            await self.writer.drain()
+            await self._run_background(response)
+
+            diff = time.time_ns() - self.ini
+            self.print_request(self.start, method, url, response, diff)
+
+            if response.status == 101 and route:
+                ws_handler = route.handlers.get('GET')
+                if ws_handler and ws_handler.websocket_parameter:
+                    ws = WebSocket(self.reader, self.writer)
+                    try:
+                        await ws_handler.execute_websocket(ws, request)
+                    except (ConnectionError, asyncio.IncompleteReadError):
+                        pass
+                break
+
+            if not persist:
+                break
+
+            try:
+                data = await asyncio.wait_for(
+                    self.reader.readline(),
+                    timeout=_KEEP_ALIVE_TIMEOUT,
+                )
+            except asyncio.TimeoutError:
+                break
+            except Exception:
+                break
+
         await self.close()
-        diff = time.time_ns() - self.ini
-        self.print_request(self.start, method, url, response, diff)

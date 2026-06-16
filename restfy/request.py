@@ -10,31 +10,6 @@ mime_types = {
 }
 
 
-class AccessControl:
-    allow_origin = '*'
-    expose_headers = []
-    max_age = 0.0
-    allow_credentials = False
-    allow_methods = []
-    allow_headers = []
-
-    def get_response_headers(self):
-        headers = {
-            'Access-Control-Allow-Origin': self.allow_origin,
-        }
-        if self.allow_methods:
-            headers['Access-Control-Allow-Methods'] = ','.join(self.allow_methods)
-        if self.allow_headers:
-            headers['Access-Control-Allow-Headers'] = ','.join(self.allow_headers)
-        if self.allow_credentials:
-            headers['Access-Control-Allow-Credentials'] = self.allow_credentials
-        if self.max_age:
-            headers['Access-Control-Max-Age'] = self.max_age
-        if self.expose_headers:
-            headers['Access-Control-Expose-Headers'] = self.expose_headers
-        return headers
-
-
 class Request:
     def __init__(self, method: str = 'GET', version: str = '1.1'):
         self.app = None
@@ -49,6 +24,7 @@ class Request:
         self.headers = {}
         self.files = {}
         self.origin = ''
+        self.connection = ''
         self.request_method = ''
         self.request_headers = ''
         self.preflight = False
@@ -59,6 +35,7 @@ class Request:
         self.params: dict = {}
         self.path_args: dict = {}
         self.vars: dict = {}
+        self.cookies: dict = {}
 
     def add_header(self, key, value):
         self.headers[key] = value
@@ -76,32 +53,36 @@ class Request:
             case 'origin':
                 self.origin = value
                 self.preflight = True if self.method == 'OPTIONS' else False
+            case 'connection':
+                self.connection = value.lower()
             case 'access-control-request-method':
                 self.request_method = value
             case 'access-control-request-headers':
                 self.request_headers = value
+            case 'cookie':
+                for pair in value.split(';'):
+                    pair = pair.strip()
+                    if '=' in pair:
+                        k, _, v = pair.partition('=')
+                        self.cookies[k.strip()] = v.strip()
 
     def dict(self):
         return self.decode_data()
 
     def decode_data(self):
+        if self.data:
+            return self.data
         if self.body:
             if self.type == 'json':
-                return json.loads(self.body)
+                self.data = json.loads(self.body)
             elif self.type == 'form-data':
-                return self._process_form_data()
+                self.data = self._process_form_data()
             elif self.type == 'x-www-form-urlencoded':
-                return self._url_decoded_data()
-        return {}
+                self.data = self._url_decoded_data()
+        return self.data
 
     def args(self):
-        args = {}
-        if self.query:
-            pairs = self.query.split('&')
-            for pair in pairs:
-                (key, value) = pair.split('=')
-                args[key] = value
-        return args
+        return self.query_args
 
     def prepare_data(self):
         self.data = self.decode_data()

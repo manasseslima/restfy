@@ -1,6 +1,19 @@
+import inspect
 import bike
+from .background import BackgroundTask, BackgroundTasks
 from .request import Request
 from .response import Response
+from .websocket import WebSocket
+
+
+def _wrap(ret):
+    if isinstance(ret, Response):
+        return ret
+    if isinstance(ret, tuple):
+        return Response(ret[0], ret[1])
+    if isinstance(ret, (dict, list, str, int, float, bool)):
+        return Response(ret)
+    return Response()
 
 
 class Handler:
@@ -11,25 +24,35 @@ class Handler:
         self.parameters: dict = {}
         self.request_parameter: str = ''
         self.payload_parameter: str = ''
+        self.websocket_parameter: str = ''
+        self.background_tasks_parameter: str = ''
         self.payload_model = None
         self.return_type: type | None = None
         params = func.__annotations__
         for name, param in params.items():
-            if issubclass(param, Request):
+            if name == 'return':
+                self.return_type = param
+            elif not inspect.isclass(param):
+                self.parameters[name] = param
+            elif issubclass(param, WebSocket):
+                self.websocket_parameter = name
+            elif issubclass(param, Request):
                 self.request_parameter = name
+            elif issubclass(param, BackgroundTasks):
+                self.background_tasks_parameter = name
             elif issubclass(param, bike.Model):
                 self.payload_parameter = name
                 self.payload_model = param
-            elif name == 'return':
-                self.return_type = param
             else:
                 self.parameters[name] = param
 
-    async def execute(self, request: Request):
+    def _build_args(self, request: Request) -> dict:
         args = {}
         for key, kind in self.parameters.items():
-            value = request.vars.pop(key, None) or request.params.pop(key, None)
-            if not value:
+            value = request.vars.pop(key, None)
+            if value is None:
+                value = request.params.pop(key, None)
+            if value is None:
                 continue
             if kind in [int, float, bool]:
                 try:
@@ -37,21 +60,53 @@ class Handler:
                 except Exception as e:
                     raise Exception(f'Error try cast value "{value}" {key} {kind}: {e}')
             args[key] = value
+        return args
+
+    async def execute(self, request: Request):
+        args = self._build_args(request)
         if self.request_parameter:
             args[self.request_parameter] = request
         if self.payload_parameter:
             instance = self.payload_model(**request.data)
             args[self.payload_parameter] = instance
+
+        bg_tasks = None
+        if self.background_tasks_parameter:
+            bg_tasks = BackgroundTasks()
+            args[self.background_tasks_parameter] = bg_tasks
+
         try:
             ret = await self.func(**args)
-            if isinstance(ret, tuple):
-                ret = Response(ret[0], ret[1])
-            elif isinstance(ret, (dict, list, str, int, float, bool)):
-                ret = Response(ret)
-        except Exception as e:
-            data = {
-                'message': 'Error on executing request',
-                'detail': str(e)
-            }
-            ret = Response(data, status=400)
-        return ret
+            response = _wrap(ret)
+        except Exception as exc:
+            exc_handler = request.app.get_exception_handler(type(exc)) if request.app else None
+            if exc_handler:
+                try:
+                    response = _wrap(await exc_handler(request, exc))
+                    response._exception_handled = True
+                    return response
+                except Exception:
+                    pass
+            return Response({'message': 'Error on executing request', 'detail': str(exc)}, status=400)
+
+        if bg_tasks:
+            if response.background is None:
+                response.background = bg_tasks
+            else:
+                merged = BackgroundTasks()
+                if isinstance(response.background, BackgroundTask):
+                    merged._tasks.append(response.background)
+                else:
+                    merged._tasks.extend(response.background._tasks)
+                merged._tasks.extend(bg_tasks._tasks)
+                response.background = merged
+
+        return response
+
+    async def execute_websocket(self, websocket: WebSocket, request: Request):
+        args = self._build_args(request)
+        if self.request_parameter:
+            args[self.request_parameter] = request
+        if self.websocket_parameter:
+            args[self.websocket_parameter] = websocket
+        await self.func(**args)

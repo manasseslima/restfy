@@ -3,7 +3,8 @@ import datetime
 import time
 import uuid
 from typing import List
-from .request import Request, AccessControl
+from .cors import CORSConfig
+from .request import Request
 from .response import Response
 from .router import Router, Route
 from .middleware import Middleware
@@ -17,15 +18,62 @@ class Application:
             description: str = '',
             *,
             base_url: str = '',
-            prepare_request_data: bool = True
+            prepare_request_data: bool = True,
+            cors: CORSConfig = None,
     ):
         self.title = title
         self.description = description
         self.router = Router(base_url=base_url)
-        self.cors = AccessControl()
+        self.cors: CORSConfig = cors or CORSConfig()
         self.middlewares: List[Middleware] = []
         self.prepare_request_data = prepare_request_data
         self.connections: dict[uuid.UUID, Connection] = {}
+        self.error_handlers: dict[int, callable] = {}
+        self.exception_handlers: dict[type, callable] = {}
+        self.static_mounts: dict[str, str] = {}
+
+    def configure_cors(
+            self,
+            *,
+            allow_origins: list[str] | str = '*',
+            allow_methods: list[str] = None,
+            allow_headers: list[str] = None,
+            allow_credentials: bool = False,
+            max_age: int = 0,
+            expose_headers: list[str] = None,
+    ):
+        self.cors = CORSConfig(
+            allow_origins=allow_origins,
+            allow_methods=allow_methods,
+            allow_headers=allow_headers,
+            allow_credentials=allow_credentials,
+            max_age=max_age,
+            expose_headers=expose_headers,
+        )
+
+    def on_error(self, status: int):
+        """Register a handler for a specific HTTP status code."""
+        def decorator(func):
+            self.error_handlers[status] = func
+            return func
+        return decorator
+
+    def on_exception(self, exc_type: type):
+        """Register a handler for a specific exception type (MRO-aware)."""
+        def decorator(func):
+            self.exception_handlers[exc_type] = func
+            return func
+        return decorator
+
+    def get_exception_handler(self, exc_type: type):
+        for cls in exc_type.__mro__:
+            if cls in self.exception_handlers:
+                return self.exception_handlers[cls]
+        return None
+
+    def mount_static(self, path: str, *, directory: str):
+        """Serve static files from *directory* under the URL *path* prefix."""
+        self.static_mounts[path.rstrip('/')] = directory
 
     def add_route(self, path, handle, method='GET'):
         self.router.add_route(path, handle, method)

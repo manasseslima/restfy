@@ -19,6 +19,8 @@ class Client:
         con = Connection(reader=None, writer=None)
         con.router = self.app.router
         con.middlewares = self.app.middlewares
+        con.cors = self.app.cors
+        con.app = self.app
         req = con.generate_request(url=url, method=method, version='http/1.1')
         req.app = self.app
         for k, v in headers.items():
@@ -34,8 +36,10 @@ class Client:
             if content_type == 'application/json' and not isinstance(data, bytes):
                 req.body = json.dumps(data).encode()
                 req.add_header('Content-Length', len(req.body))
-        res = await con.execute_handler(req)
+        res, _ = await con.execute_handler(req)
         res.render()
+        if res.background:
+            await res.background.run()
         return res
 
     async def get(
