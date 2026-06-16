@@ -1,22 +1,43 @@
 [tool.poetry]
 name = "restfy"
-version = "0.4.1"
-description = "A small rest framework"
+version = "0.5.0"
+description = "A lightweight async REST framework for Python 3.10+"
 authors = ["Manasses Lima <manasseslima@gmail.com>"]
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/manasseslima/restfy"
+keywords = ["rest", "framework", "async", "asyncio", "http", "websocket", "api"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Framework :: AsyncIO",
+]
 
 [tool.poetry.dependencies]
 python = "^3.10"
 bike = "^0.3.2"
-httplus = "^0.1.0"
+httplus = {version = "^0.1.0", optional = true}
+
+[tool.poetry.extras]
+http-client = ["httplus"]
 
 [tool.poetry.group.dev.dependencies]
-pytest-asyncio = "^0.21.0"
+pytest-asyncio = ">=0.21.0"
 pytest = "^7.3.1"
 mkdocs-material = "^9.1.14"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+asyncio_mode = "strict"

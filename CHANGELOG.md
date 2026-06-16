@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+## [0.5.0] - 2026-06-16
+
 ### Fixed
 - HTTP/2: duplicate `case b'\x02'` in `SettingFrame.set_payload()` — `SETTINGS_MAX_HEADER_LIST_SIZE` was never parsed (correct key: `b'\x06'`).
 - HTTP/2: `TypeError` in `HeaderFrame.encode_payload()` when concatenating `int` to `bytes` (`md += i`).
