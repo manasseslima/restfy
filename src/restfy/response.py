@@ -151,3 +151,40 @@ class Response:
             self.headers['Content-Type'] = 'application/pdf'
         else:
             self.headers['Content-Type'] = 'application/octet-stream'
+
+
+class HtmlResponse(Response):
+    def __init__(
+            self,
+            data: Any = None,
+            status: int = 200,
+            *,
+            headers: dict = None,
+            background=None,
+    ):
+        super().__init__(data, status, content_type='text/html', headers=headers, background=background)
+
+
+class FileResponse(Response):
+    def __init__(
+            self,
+            data: Any = None,
+            status: int = 200,
+            *,
+            content_type: str = '',
+            headers: dict = None,
+            background=None,
+    ):
+        super().__init__(data, status, content_type=content_type, headers=headers, background=background)
+
+
+class JsonResponse(Response):
+    def __init__(
+            self,
+            data: Any = None,
+            status: int = 200,
+            *,
+            headers: dict = None,
+            background=None,
+    ):
+        super().__init__(data, status, content_type='application/json', headers=headers, background=background)
